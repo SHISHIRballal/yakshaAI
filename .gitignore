@@ -1,0 +1,64 @@
+# ── Python / Backend ──────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyo
+*.pyd
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+eggs/
+.eggs/
+*.whl
+pip-log.txt
+pip-delete-this-directory.txt
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+.env.local
+
+# Database files (never commit production DB)
+*.db
+*.sqlite
+*.sqlite3
+yakshaai.db
+
+# FastAPI / Uvicorn
+*.log
+
+# ── Node / Frontend ───────────────────────────────────────────────────────────
+node_modules/
+dist/
+.cache/
+*.local
+
+# Vite build output
+frontend/dist/
+frontend/.vite/
+
+# ── Environment & Secrets ─────────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+!backend/.env.example
+
+# ── IDE & OS ──────────────────────────────────────────────────────────────────
+.vscode/settings.json
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# ── Testing ───────────────────────────────────────────────────────────────────
+.pytest_cache/
+htmlcov/
+.coverage
+coverage.xml
