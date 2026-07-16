@@ -23,6 +23,7 @@ class Booking(Base):
     event_type = Column(String(100), nullable=False)
     venue = Column(String(300), nullable=False)
     venue_city = Column(String(100), nullable=True)
+    venue_map_link = Column(String(500), nullable=True)  # OpenStreetMap/Google Maps link
     budget = Column(Float, nullable=False)
     duration_hours = Column(Integer, default=4)
     special_requirements = Column(Text, nullable=True)

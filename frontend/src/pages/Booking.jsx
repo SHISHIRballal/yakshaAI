@@ -1,36 +1,174 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import api from '../services/api'
 import LoadingSpinner from '../components/LoadingSpinner'
 import { useAuth } from '../context/AuthContext'
 
-const EVENT_TYPES = ['Temple Festival', 'Wedding Ceremony', 'Cultural Program', 'Corporate Event', 'College Event', 'Private Function', 'National Competition', 'International Festival']
+const EVENT_TYPES = [
+  'Temple Festival', 'Wedding Ceremony', 'Cultural Program',
+  'Corporate Event', 'College Event', 'Private Function',
+  'National Competition', 'International Festival',
+]
+
+// Dynamically load Leaflet from CDN
+function useLeaflet(mapRef, onLocationSelect) {
+  const mapInstance = useRef(null)
+  const markerRef  = useRef(null)
+
+  useEffect(() => {
+    if (mapInstance.current) return // already initialized
+
+    // Inject Leaflet CSS
+    if (!document.getElementById('leaflet-css')) {
+      const link = document.createElement('link')
+      link.id   = 'leaflet-css'
+      link.rel  = 'stylesheet'
+      link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css'
+      document.head.appendChild(link)
+    }
+
+    // Inject Leaflet JS
+    const loadLeaflet = () => {
+      if (window.L) { initMap(); return }
+      const script = document.createElement('script')
+      script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'
+      script.onload = initMap
+      document.head.appendChild(script)
+    }
+
+    function initMap() {
+      if (!mapRef.current || mapInstance.current) return
+      const L = window.L
+
+      // Default center: Karnataka, India
+      const map = L.map(mapRef.current).setView([13.0, 76.5], 7)
+      mapInstance.current = map
+
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
+        maxZoom: 19,
+      }).addTo(map)
+
+      // Custom icon
+      const icon = L.divIcon({
+        className: '',
+        html: `<div style="background:linear-gradient(135deg,#7c3aed,#db2777);width:32px;height:32px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);border:3px solid white;box-shadow:0 3px 12px rgba(0,0,0,0.4)"></div>`,
+        iconSize: [32, 32],
+        iconAnchor: [16, 32],
+      })
+
+      map.on('click', async (e) => {
+        const { lat, lng } = e.latlng
+        if (markerRef.current) markerRef.current.remove()
+        markerRef.current = L.marker([lat, lng], { icon }).addTo(map)
+
+        // Reverse geocode via Nominatim (free, no API key)
+        try {
+          const res = await fetch(
+            `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`,
+            { headers: { 'Accept-Language': 'en' } }
+          )
+          const data = await res.json()
+          const addr = data.address || {}
+          const venueName = [
+            addr.amenity || addr.building || addr.leisure || addr.tourism,
+            addr.road,
+            addr.suburb || addr.neighbourhood,
+            addr.city || addr.town || addr.village,
+          ].filter(Boolean).join(', ')
+
+          const city = addr.city || addr.town || addr.village || addr.county || ''
+          const mapLink = `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lng}#map=16/${lat}/${lng}`
+
+          onLocationSelect({
+            venue: venueName || `${lat.toFixed(5)}, ${lng.toFixed(5)}`,
+            venue_city: city,
+            venue_map_link: mapLink,
+            lat,
+            lng,
+          })
+
+          markerRef.current.bindPopup(
+            `<strong>${venueName || 'Selected Location'}</strong><br/>${city}<br/>
+             <a href="${mapLink}" target="_blank" style="color:#7c3aed">Open in Maps</a>`
+          ).openPopup()
+        } catch {
+          const mapLink = `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lng}#map=16/${lat}/${lng}`
+          onLocationSelect({
+            venue: `${lat.toFixed(5)}, ${lng.toFixed(5)}`,
+            venue_city: '',
+            venue_map_link: mapLink,
+            lat,
+            lng,
+          })
+        }
+      })
+    }
+
+    loadLeaflet()
+
+    return () => {
+      if (mapInstance.current) {
+        mapInstance.current.remove()
+        mapInstance.current = null
+      }
+    }
+  }, [])
+}
 
 export default function Booking() {
   const { artistId } = useParams()
-  const navigate = useNavigate()
-  const { user } = useAuth()
-  const [artist, setArtist] = useState(null)
-  const [loading, setLoading] = useState(true)
-  const [submitting, setSubmitting] = useState(false)
-  const [success, setSuccess] = useState(false)
-  const [error, setError] = useState('')
+  const navigate      = useNavigate()
+  const { user }      = useAuth()
+
+  const [artist, setArtist]           = useState(null)
+  const [loading, setLoading]         = useState(true)
+  const [submitting, setSubmitting]   = useState(false)
+  const [success, setSuccess]         = useState(false)
+  const [error, setError]             = useState('')
+  const [unavailDates, setUnavailDates] = useState(new Set()) // Set of 'YYYY-MM-DD' strings
+  const [dateWarning, setDateWarning]   = useState('')
+  const [mapMode, setMapMode]           = useState(false)
+
   const [form, setForm] = useState({
     event_date: '',
     event_type: '',
     venue: '',
     venue_city: '',
+    venue_map_link: '',
     budget: '',
     duration_hours: 4,
     special_requirements: '',
     organizer_notes: '',
   })
 
+  const mapRef = useRef(null)
+
+  // Callback when user clicks on map
+  const handleLocationSelect = ({ venue, venue_city, venue_map_link }) => {
+    setForm(f => ({ ...f, venue, venue_city, venue_map_link }))
+  }
+
+  // Initialize Leaflet map
+  useLeaflet(mapRef, handleLocationSelect)
+
+  // Fetch artist + unavailable dates
   useEffect(() => {
-    api.get(`/artists/${artistId}`)
-      .then(res => {
-        setArtist(res.data)
-        setForm(f => ({ ...f, budget: res.data.pricing_per_event }))
+    Promise.all([
+      api.get(`/artists/${artistId}`),
+      api.get(`/artists/${artistId}/availability`),
+    ])
+      .then(([artistRes, availRes]) => {
+        setArtist(artistRes.data)
+        setForm(f => ({ ...f, budget: artistRes.data.pricing_per_event }))
+
+        // Build set of unavailable date strings
+        const blocked = new Set(
+          (availRes.data || [])
+            .filter(d => d.is_available === false)
+            .map(d => d.date)
+        )
+        setUnavailDates(blocked)
       })
       .catch(() => navigate('/artists'))
       .finally(() => setLoading(false))
@@ -38,10 +176,23 @@ export default function Booking() {
 
   const handleChange = (field, value) => setForm(f => ({ ...f, [field]: value }))
 
+  const handleDateChange = (value) => {
+    handleChange('event_date', value)
+    if (unavailDates.has(value)) {
+      setDateWarning(`⚠️ Artist has marked ${value} as unavailable. Please choose a different date.`)
+    } else {
+      setDateWarning('')
+    }
+  }
+
   const handleSubmit = async (e) => {
     e.preventDefault()
     if (!form.event_date || !form.event_type || !form.venue || !form.budget) {
       setError('Please fill in all required fields.')
+      return
+    }
+    if (unavailDates.has(form.event_date)) {
+      setError(`Artist is not available on ${form.event_date}. Please select a different date.`)
       return
     }
     setSubmitting(true)
@@ -68,17 +219,23 @@ export default function Booking() {
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '60vh', textAlign: 'center', padding: 'var(--space-8)' }}>
         <div style={{ fontSize: '4rem', marginBottom: 'var(--space-6)', animation: 'float 2s ease-in-out infinite' }}>🎉</div>
         <h2 style={{ marginBottom: 'var(--space-3)' }}>Booking Request Sent!</h2>
-        <p style={{ color: 'var(--color-text-muted)', maxWidth: 440, marginBottom: 'var(--space-6)' }}>
-          Your booking request for <strong>{artist?.user_name}</strong> has been submitted. 
+        <p style={{ color: 'var(--color-text-muted)', maxWidth: 440, marginBottom: 'var(--space-4)' }}>
+          Your booking request for <strong>{artist?.user_name}</strong> has been submitted.
           The artist will review and confirm within 24 hours.
         </p>
+        {form.venue_map_link && (
+          <a
+            href={form.venue_map_link}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ display: 'inline-flex', alignItems: 'center', gap: 6, marginBottom: 'var(--space-6)', color: 'var(--color-primary)', fontSize: '0.9rem', textDecoration: 'none', fontWeight: 600 }}
+          >
+            📍 View venue on map →
+          </a>
+        )}
         <div style={{ display: 'flex', gap: 'var(--space-4)', flexWrap: 'wrap', justifyContent: 'center' }}>
-          <button className="btn btn-primary btn-lg" onClick={() => navigate('/dashboard')}>
-            View My Bookings
-          </button>
-          <button className="btn btn-outline btn-lg" onClick={() => navigate('/artists')}>
-            Browse More Artists
-          </button>
+          <button className="btn btn-primary btn-lg" onClick={() => navigate('/dashboard')}>View My Bookings</button>
+          <button className="btn btn-outline btn-lg" onClick={() => navigate('/artists')}>Browse More Artists</button>
         </div>
       </div>
     )
@@ -87,11 +244,7 @@ export default function Booking() {
   return (
     <div className="page-enter">
       {/* Header */}
-      <div style={{
-        background: 'var(--color-surface)',
-        borderBottom: '1px solid var(--color-border)',
-        padding: 'var(--space-8) 0',
-      }}>
+      <div style={{ background: 'var(--color-surface)', borderBottom: '1px solid var(--color-border)', padding: 'var(--space-8) 0' }}>
         <div className="container">
           <button onClick={() => navigate(-1)} style={{ background: 'none', border: 'none', color: 'var(--color-text-muted)', cursor: 'pointer', marginBottom: 'var(--space-4)', display: 'flex', alignItems: 'center', gap: 'var(--space-2)' }}>
             ← Back
@@ -103,19 +256,37 @@ export default function Booking() {
 
       <div className="container" style={{ padding: 'var(--space-8) var(--space-6)' }}>
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 340px', gap: 'var(--space-8)', alignItems: 'start' }}>
+
           {/* Booking Form */}
           <form onSubmit={handleSubmit}>
+
+            {/* ── Event Details ── */}
             <div className="dashboard-card" style={{ marginBottom: 'var(--space-6)' }}>
               <div className="dashboard-card-header">
                 <h2 className="dashboard-card-title">Event Details</h2>
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-4)' }}>
+                {/* Date picker — disabled if unavailable */}
                 <div className="form-group">
                   <label className="form-label">Event Date *</label>
-                  <input type="date" className="form-input" required
+                  <input
+                    type="date"
+                    className="form-input"
+                    required
                     min={new Date().toISOString().split('T')[0]}
-                    value={form.event_date} onChange={e => handleChange('event_date', e.target.value)} />
+                    value={form.event_date}
+                    onChange={e => handleDateChange(e.target.value)}
+                    style={unavailDates.has(form.event_date) ? { borderColor: 'var(--color-danger)', boxShadow: '0 0 0 2px rgba(231,76,60,0.2)' } : {}}
+                  />
+                  {dateWarning && (
+                    <p style={{ color: 'var(--color-danger)', fontSize: '0.78rem', marginTop: 4 }}>{dateWarning}</p>
+                  )}
+                  {unavailDates.size > 0 && (
+                    <p style={{ color: 'var(--color-text-dim)', fontSize: '0.72rem', marginTop: 3 }}>
+                      🚫 {unavailDates.size} date(s) blocked by artist
+                    </p>
+                  )}
                 </div>
 
                 <div className="form-group">
@@ -126,17 +297,15 @@ export default function Booking() {
                   </select>
                 </div>
 
-                <div className="form-group" style={{ gridColumn: '1 / -1' }}>
-                  <label className="form-label">Venue Name & Address *</label>
-                  <input type="text" className="form-input" required placeholder="e.g., Sri Krishna Temple, MG Road"
-                    value={form.venue} onChange={e => handleChange('venue', e.target.value)} />
-                </div>
-
-                <div className="form-group">
-                  <label className="form-label">Venue City</label>
-                  <input type="text" className="form-input" placeholder="e.g., Udupi"
-                    value={form.venue_city} onChange={e => handleChange('venue_city', e.target.value)} />
-                </div>
+                {/* Unavailable dates legend */}
+                {unavailDates.size > 0 && (
+                  <div style={{ gridColumn: '1 / -1', padding: 'var(--space-3) var(--space-4)', background: 'rgba(231,76,60,0.06)', borderRadius: 'var(--radius-md)', border: '1px solid rgba(231,76,60,0.2)', fontSize: '0.8rem' }}>
+                    <strong style={{ color: 'var(--color-danger)' }}>🚫 Artist Unavailable Dates:</strong>{' '}
+                    <span style={{ color: 'var(--color-text-muted)' }}>
+                      {[...unavailDates].sort().slice(0, 8).join(', ')}{unavailDates.size > 8 ? ` +${unavailDates.size - 8} more` : ''}
+                    </span>
+                  </div>
+                )}
 
                 <div className="form-group">
                   <label className="form-label">Duration (hours)</label>
@@ -147,17 +316,103 @@ export default function Booking() {
               </div>
             </div>
 
+            {/* ── Venue / Location ── */}
             <div className="dashboard-card" style={{ marginBottom: 'var(--space-6)' }}>
               <div className="dashboard-card-header">
-                <h2 className="dashboard-card-title">Budget & Notes</h2>
+                <h2 className="dashboard-card-title">📍 Venue Location</h2>
+                <button
+                  type="button"
+                  className={`btn btn-sm ${mapMode ? 'btn-primary' : 'btn-outline'}`}
+                  onClick={() => setMapMode(m => !m)}
+                >
+                  {mapMode ? '✏️ Type Manually' : '🗺️ Pick on Map'}
+                </button>
               </div>
 
+              {/* MAP MODE */}
+              {mapMode && (
+                <div style={{ marginBottom: 'var(--space-4)' }}>
+                  <p style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem', marginBottom: 'var(--space-3)' }}>
+                    Click anywhere on the map to set your event venue. Address will auto-fill below.
+                  </p>
+                  <div
+                    ref={mapRef}
+                    style={{
+                      height: 320,
+                      borderRadius: 'var(--radius-lg)',
+                      border: '2px solid var(--color-border)',
+                      overflow: 'hidden',
+                      position: 'relative',
+                      zIndex: 1,
+                    }}
+                  />
+                  {form.venue_map_link && (
+                    <div style={{ marginTop: 'var(--space-3)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>Map link generated:</span>
+                      <a href={form.venue_map_link} target="_blank" rel="noopener noreferrer"
+                        style={{ fontSize: '0.8rem', color: 'var(--color-primary)', textDecoration: 'none', fontWeight: 600 }}>
+                        📍 View on OpenStreetMap →
+                      </a>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-4)' }}>
+                <div className="form-group" style={{ gridColumn: '1 / -1' }}>
+                  <label className="form-label">Venue Name &amp; Address *</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    required
+                    placeholder={mapMode ? 'Auto-filled when you click the map…' : 'e.g., Sri Krishna Temple, MG Road'}
+                    value={form.venue}
+                    onChange={e => handleChange('venue', e.target.value)}
+                  />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Venue City</label>
+                  <input
+                    type="text"
+                    className="form-input"
+                    placeholder="e.g., Udupi"
+                    value={form.venue_city}
+                    onChange={e => handleChange('venue_city', e.target.value)}
+                  />
+                </div>
+                {/* Manual map link */}
+                {!mapMode && (
+                  <div className="form-group">
+                    <label className="form-label">Map Link <span style={{ color: 'var(--color-text-dim)', fontWeight: 400 }}>(optional)</span></label>
+                    <input
+                      type="url"
+                      className="form-input"
+                      placeholder="Paste Google Maps or OSM link"
+                      value={form.venue_map_link}
+                      onChange={e => handleChange('venue_map_link', e.target.value)}
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* ── Budget & Notes ── */}
+            <div className="dashboard-card" style={{ marginBottom: 'var(--space-6)' }}>
+              <div className="dashboard-card-header">
+                <h2 className="dashboard-card-title">Budget &amp; Notes</h2>
+              </div>
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-4)' }}>
                 <div className="form-group">
                   <label className="form-label">Your Budget (₹) *</label>
-                  <input type="number" className="form-input" required
-                    min={1000} placeholder="e.g., 25000"
-                    value={form.budget} onChange={e => handleChange('budget', e.target.value)} />
+                  <input
+                    type="number"
+                    className="form-input"
+                    required
+                    min={1000}
+                    placeholder="e.g., 25000"
+                    value={form.budget}
+                    onChange={e => handleChange('budget', e.target.value)}
+                  />
                   <p style={{ fontSize: '0.75rem', color: 'var(--color-text-dim)' }}>
                     Artist fee: ₹{artist?.pricing_per_event?.toLocaleString('en-IN')}
                   </p>
@@ -172,8 +427,7 @@ export default function Booking() {
                     border: '1px solid var(--color-border)',
                     fontSize: '0.875rem',
                     color: Number(form.budget) >= artist?.pricing_per_event
-                      ? 'var(--color-success)'
-                      : 'var(--color-warning)',
+                      ? 'var(--color-success)' : 'var(--color-warning)',
                   }}>
                     {Number(form.budget) >= artist?.pricing_per_event
                       ? '✓ Sufficient for artist fee'
@@ -185,24 +439,31 @@ export default function Booking() {
                   <label className="form-label">Special Requirements</label>
                   <textarea className="form-textarea" rows={3}
                     placeholder="Costume preferences, specific compositions, language requirements, etc."
-                    value={form.special_requirements} onChange={e => handleChange('special_requirements', e.target.value)} />
+                    value={form.special_requirements}
+                    onChange={e => handleChange('special_requirements', e.target.value)}
+                  />
                 </div>
 
                 <div className="form-group" style={{ gridColumn: '1 / -1' }}>
                   <label className="form-label">Message to Artist</label>
                   <textarea className="form-textarea" rows={3}
                     placeholder="Introduce yourself and your event..."
-                    value={form.organizer_notes} onChange={e => handleChange('organizer_notes', e.target.value)} />
+                    value={form.organizer_notes}
+                    onChange={e => handleChange('organizer_notes', e.target.value)}
+                  />
                 </div>
               </div>
             </div>
 
             {error && <div className="alert alert-error" style={{ marginBottom: 'var(--space-4)' }}>{error}</div>}
 
-            <button type="submit" className="btn btn-primary btn-xl w-full" disabled={submitting}>
+            <button
+              type="submit"
+              className="btn btn-primary btn-xl w-full"
+              disabled={submitting || unavailDates.has(form.event_date)}
+            >
               {submitting ? '⏳ Submitting...' : '📋 Submit Booking Request'}
             </button>
-
             <p style={{ textAlign: 'center', color: 'var(--color-text-muted)', fontSize: '0.8rem', marginTop: 'var(--space-3)' }}>
               The artist will review and confirm your request within 24 hours.
             </p>
@@ -214,17 +475,8 @@ export default function Booking() {
               <h3 style={{ fontFamily: 'var(--font-body)', fontSize: '1rem', fontWeight: 700, marginBottom: 'var(--space-5)' }}>
                 Artist Summary
               </h3>
-              <div style={{
-                display: 'flex', alignItems: 'center', gap: 'var(--space-4)',
-                marginBottom: 'var(--space-5)',
-                paddingBottom: 'var(--space-5)',
-                borderBottom: '1px solid var(--color-border)',
-              }}>
-                <div style={{
-                  width: 64, height: 64, borderRadius: 'var(--radius-lg)',
-                  background: 'var(--color-surface-2)', overflow: 'hidden',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.75rem',
-                }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-4)', marginBottom: 'var(--space-5)', paddingBottom: 'var(--space-5)', borderBottom: '1px solid var(--color-border)' }}>
+                <div style={{ width: 64, height: 64, borderRadius: 'var(--radius-lg)', background: 'var(--color-surface-2)', overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.75rem' }}>
                   {artist?.profile_photo_url
                     ? <img src={artist.profile_photo_url} alt={artist.user_name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                     : '🎭'}
@@ -240,17 +492,21 @@ export default function Booking() {
                 { label: 'Performance Style', value: artist?.performance_style },
                 { label: 'Experience', value: `${artist?.experience_years} years` },
                 { label: 'Location', value: `${artist?.city}, Karnataka` },
-                { label: 'Rating', value: `⭐ ${artist?.avg_rating?.toFixed(1)} (${artist?.total_reviews} reviews)` },
+                { label: 'Rating', value: artist?.total_reviews > 0 ? `⭐ ${artist?.avg_rating?.toFixed(1)} (${artist?.total_reviews} reviews)` : 'No reviews yet' },
                 { label: 'Standard Fee', value: `₹${artist?.pricing_per_event?.toLocaleString('en-IN')}` },
               ].map(({ label, value }) => (
-                <div key={label} style={{
-                  display: 'flex', justifyContent: 'space-between', marginBottom: 'var(--space-3)',
-                  fontSize: '0.875rem',
-                }}>
+                <div key={label} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 'var(--space-3)', fontSize: '0.875rem' }}>
                   <span style={{ color: 'var(--color-text-muted)' }}>{label}</span>
                   <span style={{ fontWeight: 500, textAlign: 'right', maxWidth: 160 }}>{value}</span>
                 </div>
               ))}
+
+              {/* Unavailable dates count */}
+              {unavailDates.size > 0 && (
+                <div style={{ marginTop: 'var(--space-4)', padding: 'var(--space-3)', background: 'rgba(231,76,60,0.06)', borderRadius: 'var(--radius-md)', border: '1px solid rgba(231,76,60,0.2)', fontSize: '0.78rem', color: 'var(--color-danger)', textAlign: 'center' }}>
+                  🚫 {unavailDates.size} blocked date(s) — artist unavailable
+                </div>
+              )}
 
               <div className="divider divider-gold" />
 

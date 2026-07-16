@@ -4,6 +4,7 @@ import { AuthProvider, useAuth } from './context/AuthContext'
 import { NotificationProvider } from './context/NotificationContext'
 import Navbar from './components/Navbar'
 import Footer from './components/Footer'
+import ChatbotWidget from './components/ChatbotWidget'
 import Home from './pages/Home'
 import Artists from './pages/Artists'
 import ArtistDetails from './pages/ArtistDetails'
@@ -59,6 +60,7 @@ function AppLayout() {
         </Routes>
       </main>
       <Footer />
+      <ChatbotWidget />
     </>
   )
 }

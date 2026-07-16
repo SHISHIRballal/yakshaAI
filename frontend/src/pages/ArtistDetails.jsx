@@ -97,7 +97,10 @@ export default function ArtistDetails() {
               </div>
 
               <div style={{ display: 'flex', gap: 'var(--space-6)', flexWrap: 'wrap', marginBottom: 'var(--space-4)' }}>
-                <StarRating rating={artist.avg_rating} size="lg" showCount count={artist.total_reviews} />
+                {artist.total_reviews > 0
+                  ? <StarRating rating={artist.avg_rating} size="lg" showCount count={artist.total_reviews} />
+                  : <span style={{ fontSize: '0.875rem', color: 'var(--color-text-muted)' }}>⭐ No reviews yet</span>
+                }
                 <span style={{ color: 'var(--color-text-muted)', fontSize: '0.875rem' }}>📍 {artist.city}, Karnataka</span>
                 <span style={{ color: 'var(--color-text-muted)', fontSize: '0.875rem' }}>🎪 {artist.experience_years} years</span>
               </div>
@@ -128,8 +131,8 @@ export default function ArtistDetails() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)', minWidth: 180 }}>
               {[
                 { label: 'Total Events', value: artist.total_bookings },
-                { label: 'Happy Clients', value: artist.total_reviews },
-                { label: 'Avg Rating', value: `${artist.avg_rating}★` },
+                { label: 'Reviews', value: artist.total_reviews > 0 ? artist.total_reviews : '—' },
+                { label: 'Avg Rating', value: artist.total_reviews > 0 ? `${artist.avg_rating?.toFixed(1)}★` : 'New' },
                 { label: 'Experience', value: `${artist.experience_years} yrs` },
               ].map(s => (
                 <div key={s.label} className="stat-card" style={{ textAlign: 'center', padding: 'var(--space-3)' }}>

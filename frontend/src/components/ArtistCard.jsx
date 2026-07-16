@@ -39,7 +39,7 @@ export default function ArtistCard({ artist }) {
             <div className="artist-card-specialty">{artist.specialization}</div>
           </div>
           <div className="stars" style={{ fontSize: '0.85rem' }}>
-            {stars(artist.avg_rating)}
+            {artist.total_reviews > 0 ? stars(artist.avg_rating) : <span style={{ color: 'var(--color-text-dim)', fontSize: '0.75rem' }}>New</span>}
           </div>
         </div>
 
@@ -70,7 +70,11 @@ export default function ArtistCard({ artist }) {
           </div>
           <div className="artist-card-meta-item">
             <span className="icon">⭐</span>
-            <span>{artist.avg_rating.toFixed(1)} ({artist.total_reviews} reviews)</span>
+            <span>
+              {artist.total_reviews > 0
+                ? `${artist.avg_rating.toFixed(1)} (${artist.total_reviews} reviews)`
+                : 'No reviews yet'}
+            </span>
           </div>
         </div>
 

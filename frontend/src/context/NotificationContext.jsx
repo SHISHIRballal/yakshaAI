@@ -35,9 +35,11 @@ export function NotificationProvider({ children }) {
     if (!user || !token) return
     if (wsRef.current?.readyState === WebSocket.OPEN) return
 
-    const proto = window.location.protocol === 'https:' ? 'wss' : 'ws'
-    const host = '127.0.0.1:8000'
-    const url = `${proto}://${host}/ws/notifications/${user.id}?token=${token}`
+    // In production: VITE_WS_URL = wss://your-render-app.onrender.com
+    // In dev: derived from current page (localhost:8000 via same origin logic)
+    const wsBase = import.meta.env.VITE_WS_URL ||
+      `${window.location.protocol === 'https:' ? 'wss' : 'ws'}://127.0.0.1:8000`
+    const url = `${wsBase}/ws/notifications/${user.id}?token=${token}`
 
     const ws = new WebSocket(url)
     wsRef.current = ws

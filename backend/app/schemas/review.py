@@ -5,6 +5,7 @@ from datetime import datetime
 
 class ReviewCreate(BaseModel):
     booking_id: int
+    artist_id: Optional[int] = None  # ignored — derived from booking, kept for frontend compatibility
     rating: float  # 1.0 - 5.0
     comment: Optional[str] = None
 

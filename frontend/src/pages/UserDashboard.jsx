@@ -268,7 +268,7 @@ export default function UserDashboard() {
                   const st = STATUS_COLORS[b.status] || STATUS_COLORS.pending
                   const isPast = isPastDate(b.event_date)
                   const canMarkComplete = b.status === 'confirmed' && isPast
-                  const canReview = (b.status === 'completed') && !reviewedIds.has(b.id)
+                  const canReview = (b.status === 'completed') && isPast && !reviewedIds.has(b.id)
                   const alreadyReviewed = (b.status === 'completed') && reviewedIds.has(b.id)
 
                   return (
@@ -305,6 +305,12 @@ export default function UserDashboard() {
 
                           <div style={{ display: 'flex', gap: 'var(--space-4)', fontSize: '0.8rem', color: 'var(--color-text-muted)', flexWrap: 'wrap', marginBottom: 'var(--space-3)' }}>
                             <span>📍 {b.venue}</span>
+                            {b.venue_map_link && (
+                              <a href={b.venue_map_link} target="_blank" rel="noopener noreferrer"
+                                style={{ color: 'var(--color-primary)', textDecoration: 'none', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                                🗺️ View Map
+                              </a>
+                            )}
                             <span>💰 ₹{b.budget?.toLocaleString('en-IN')}</span>
                             <span>⏱ {b.duration_hours}h</span>
                           </div>

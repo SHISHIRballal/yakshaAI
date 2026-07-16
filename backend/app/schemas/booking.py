@@ -10,6 +10,7 @@ class BookingCreate(BaseModel):
     event_type: str
     venue: str
     venue_city: Optional[str] = None
+    venue_map_link: Optional[str] = None
     budget: float
     duration_hours: int = 4
     special_requirements: Optional[str] = None
@@ -29,6 +30,7 @@ class BookingOut(BaseModel):
     event_type: str
     venue: str
     venue_city: Optional[str] = None
+    venue_map_link: Optional[str] = None
     budget: float
     duration_hours: int
     special_requirements: Optional[str] = None

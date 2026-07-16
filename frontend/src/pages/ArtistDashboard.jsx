@@ -222,7 +222,13 @@ export default function ArtistDashboard() {
                         </div>
 
                         <div style={{ display: 'flex', gap: 'var(--space-4)', fontSize: '0.8rem', color: 'var(--color-text-muted)', marginBottom: 'var(--space-3)', flexWrap: 'wrap' }}>
-                          <span>📍 {b.venue}, {b.venue_city}</span>
+                          <span>📍 {b.venue}{b.venue_city ? `, ${b.venue_city}` : ''}</span>
+                          {b.venue_map_link && (
+                            <a href={b.venue_map_link} target="_blank" rel="noopener noreferrer"
+                              style={{ color: 'var(--color-primary)', textDecoration: 'none', fontWeight: 600 }}>
+                              🗺️ View Map
+                            </a>
+                          )}
                           <span>💰 Offered: ₹{b.budget?.toLocaleString('en-IN')}</span>
                         </div>
 

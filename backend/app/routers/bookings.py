@@ -12,6 +12,7 @@ from app.database import get_db
 from app.models.booking import Booking, BookingStatus
 from app.models.artist import ArtistProfile
 from app.models.user import User
+from app.models.availability import Availability
 from app.schemas.booking import BookingCreate, BookingOut, BookingStatusUpdate
 from app.utils.jwt_handler import get_current_user
 from app.websocket_manager import manager
@@ -30,6 +31,7 @@ def enrich_booking(b: Booking) -> dict:
         "event_type": b.event_type,
         "venue": b.venue,
         "venue_city": b.venue_city,
+        "venue_map_link": b.venue_map_link,
         "budget": b.budget,
         "duration_hours": b.duration_hours,
         "special_requirements": b.special_requirements,
@@ -73,6 +75,19 @@ def create_booking(
     if current_user.role == "artist" and artist.user_id == current_user.id:
         raise HTTPException(status_code=400, detail="Cannot book yourself")
 
+    # ── Check artist availability for the requested date ─────────────────────
+    blocked = db.query(Availability).filter(
+        Availability.artist_id == booking_data.artist_id,
+        Availability.date == booking_data.event_date,
+        Availability.is_available == False,  # noqa: E712
+    ).first()
+    if blocked:
+        note = f" Note: {blocked.note}" if blocked.note else ""
+        raise HTTPException(
+            status_code=400,
+            detail=f"Artist is not available on {booking_data.event_date}.{note} Please choose a different date.",
+        )
+
     booking = Booking(
         organizer_id=current_user.id,
         artist_id=booking_data.artist_id,
@@ -80,6 +95,7 @@ def create_booking(
         event_type=booking_data.event_type,
         venue=booking_data.venue,
         venue_city=booking_data.venue_city,
+        venue_map_link=booking_data.venue_map_link,
         budget=booking_data.budget,
         duration_hours=booking_data.duration_hours,
         special_requirements=booking_data.special_requirements,

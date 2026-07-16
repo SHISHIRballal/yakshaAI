@@ -3,10 +3,17 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 from app.config import settings
 
-engine = create_engine(
-    settings.DATABASE_URL,
-    connect_args={"check_same_thread": False}  # SQLite specific
-)
+# Support both SQLite (local dev) and PostgreSQL (production)
+db_url = settings.DATABASE_URL
+
+# SQLAlchemy requires postgresql:// not postgres:// (Neon/Render use postgres://)
+if db_url.startswith("postgres://"):
+    db_url = db_url.replace("postgres://", "postgresql://", 1)
+
+# SQLite needs check_same_thread=False; PostgreSQL does not
+connect_args = {"check_same_thread": False} if db_url.startswith("sqlite") else {}
+
+engine = create_engine(db_url, connect_args=connect_args)
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
