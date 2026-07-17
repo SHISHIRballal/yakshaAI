@@ -33,6 +33,7 @@ async def lifespan(app: FastAPI):
     # Startup
     Base.metadata.create_all(bind=engine)
     _create_default_admin()
+    _auto_seed_if_empty()
     logger.info("YakshaAI API started successfully")
     yield
     # Shutdown
@@ -55,6 +56,30 @@ def _create_default_admin():
             logger.info(f"Admin user created: {settings.ADMIN_EMAIL}")
         else:
             logger.info(f"Admin user already exists: {settings.ADMIN_EMAIL}")
+    finally:
+        db.close()
+
+
+def _auto_seed_if_empty():
+    """Auto-seed DB with artists on first production deployment when empty."""
+    from app.models.artist import ArtistProfile
+    db = SessionLocal()
+    try:
+        count = db.query(ArtistProfile).count()
+        if count == 0:
+            logger.info("Empty DB detected — running seed_data...")
+            try:
+                import subprocess, sys, os
+                seed_path = os.path.join(os.path.dirname(__file__), "..", "seed_data.py")
+                if os.path.exists(seed_path):
+                    subprocess.run([sys.executable, seed_path], check=True, timeout=60)
+                    logger.info("Seed completed successfully.")
+                else:
+                    logger.warning("seed_data.py not found — skipping auto-seed.")
+            except Exception as e:
+                logger.warning(f"Auto-seed failed (non-fatal): {e}")
+        else:
+            logger.info(f"DB already has {count} artists — skipping seed.")
     finally:
         db.close()
 

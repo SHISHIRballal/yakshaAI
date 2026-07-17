@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: yaksha-ai-backend
+    runtime: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app.main:app -w 2 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:$PORT
+    envVars:
+      - key: DATABASE_URL
+        sync: false          # Set manually in Render dashboard (Neon PostgreSQL URL)
+      - key: SECRET_KEY
+        generateValue: true  # Render auto-generates a secure random value
+      - key: ALGORITHM
+        value: HS256
+      - key: ACCESS_TOKEN_EXPIRE_MINUTES
+        value: 1440
+      - key: ADMIN_EMAIL
+        value: admin@yakshagai.com
+      - key: ADMIN_PASSWORD
+        sync: false          # Set manually in Render dashboard
+      - key: DEBUG
+        value: false
+      - key: CORS_ORIGINS
+        sync: false          # Set to your Vercel frontend URL after deploy

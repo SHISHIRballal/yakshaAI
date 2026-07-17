@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 1440  # 24 hours
 
-    # Database
+    # Database — SQLite locally, PostgreSQL (Neon) in production
     DATABASE_URL: str = "sqlite:///./yakshaai.db"
 
     # Admin
@@ -17,17 +17,16 @@ class Settings(BaseSettings):
     ADMIN_PASSWORD: str = "Admin@1234"
 
     # App
-    DEBUG: bool = True
+    DEBUG: bool = False
     APP_NAME: str = "YakshaAI"
     APP_VERSION: str = "1.0.0"
 
-    # CORS — comma-separated origins in .env, e.g. CORS_ORIGINS=http://localhost:5173,https://yakshagai.com
+    # CORS — In production set CORS_ORIGINS env var to your Vercel URL
+    # e.g. CORS_ORIGINS=https://yaksha-ai.vercel.app,https://yakshagana.com
     CORS_ORIGINS: List[str] = [
         "http://localhost:5173",
         "http://127.0.0.1:5173",
         "http://localhost:3000",
-        "https://yaksha-ai.vercel.app",
-        "https://yakshaai.vercel.app",
     ]
 
     class Config:
