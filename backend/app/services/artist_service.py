@@ -32,6 +32,9 @@ def enrich_artist(artist: ArtistProfile) -> dict:
     }
     return data
 
+from app.utils.pagination import encode_cursor, decode_cursor
+from app.core.exceptions import NotFoundException, ForbiddenException, BadRequestException
+
 def list_artists(
     db: Session,
     city: Optional[str] = None,
@@ -41,11 +44,15 @@ def list_artists(
     min_experience: Optional[int] = None,
     is_verified: Optional[bool] = None,
     search: Optional[str] = None,
+    cursor: Optional[str] = None,
     skip: int = 0,
-    limit: int = 20,
-) -> list:
+    limit: int = 10,
+) -> dict:
+    if limit < 1 or limit > 50:
+        raise BadRequestException(detail="Limit must be between 1 and 50")
+
     query = db.query(ArtistProfile).join(User)
-    
+
     if city:
         safe_city = city.replace("%", "\\%").replace("_", "\\_")
         query = query.filter(ArtistProfile.city.ilike(f"%{safe_city}%"))
@@ -66,11 +73,26 @@ def list_artists(
             ArtistProfile.specialization.ilike(f"%{safe_search}%") |
             ArtistProfile.city.ilike(f"%{safe_search}%")
         )
-    
-    artists = query.offset(skip).limit(limit).all()
-    result = []
+
+    # Order deterministically by id
+    query = query.order_by(ArtistProfile.id.asc())
+
+    if cursor:
+        decoded = decode_cursor(cursor)
+        last_id = decoded.get("id")
+        if last_id is not None:
+            query = query.filter(ArtistProfile.id > last_id)
+    elif skip > 0:
+        query = query.offset(skip)
+
+    # Fetch limit + 1 to detect end-of-feed
+    fetched = query.limit(limit + 1).all()
+    has_more = len(fetched) > limit
+    artists = fetched[:limit]
+
+    items = []
     for a in artists:
-        result.append({
+        items.append({
             "id": a.id,
             "user_id": a.user_id,
             "bio": a.bio,
@@ -88,7 +110,14 @@ def list_artists(
             "total_bookings": a.total_bookings,
             "user_name": a.user.name if a.user else None,
         })
-    return result
+
+    next_cursor = encode_cursor({"id": artists[-1].id}) if (has_more and artists) else None
+
+    return {
+        "items": items,
+        "next_cursor": next_cursor,
+        "has_more": has_more,
+    }
 
 def get_artist(db: Session, artist_id: int) -> dict:
     artist = db.query(ArtistProfile).filter(ArtistProfile.id == artist_id).first()

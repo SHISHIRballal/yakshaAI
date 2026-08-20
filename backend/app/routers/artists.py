@@ -11,7 +11,7 @@ from app.services import artist_service
 router = APIRouter(prefix="/artists", tags=["Artists"])
 
 
-@router.get("", response_model=List[ArtistListOut])
+@router.get("")
 def list_artists(
     city: Optional[str] = Query(None),
     performance_style: Optional[PerformanceStyle] = Query(None),
@@ -20,14 +20,15 @@ def list_artists(
     min_experience: Optional[int] = Query(None),
     is_verified: Optional[bool] = Query(None),
     search: Optional[str] = Query(None),
+    cursor: Optional[str] = Query(None),
     skip: int = 0,
-    limit: int = 20,
+    limit: int = 10,
     db: Session = Depends(get_db),
 ):
     return artist_service.list_artists(
         db, city=city, performance_style=performance_style, min_rating=min_rating,
         max_price=max_price, min_experience=min_experience, is_verified=is_verified,
-        search=search, skip=skip, limit=limit
+        search=search, cursor=cursor, skip=skip, limit=limit
     )
 
 
