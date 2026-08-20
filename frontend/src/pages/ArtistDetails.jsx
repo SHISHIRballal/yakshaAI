@@ -116,6 +116,14 @@ export default function ArtistDetails() {
                     📋 Book This Artist
                   </button>
                 )}
+                {user && user.id !== artist.user_id && (
+                  <button
+                    className="btn btn-secondary btn-lg"
+                    onClick={() => navigate(`/messages?user_id=${artist.user_id}`)}
+                  >
+                    💬 Message Artist
+                  </button>
+                )}
                 {!user && (
                   <Link to="/auth" className="btn btn-primary btn-lg">
                     Sign In to Book

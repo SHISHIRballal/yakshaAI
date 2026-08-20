@@ -15,6 +15,7 @@ import UserDashboard from './pages/UserDashboard'
 import ArtistDashboard from './pages/ArtistDashboard'
 import AdminDashboard from './pages/AdminDashboard'
 import Contact from './pages/Contact'
+import Messages from './pages/Messages'
 
 function ProtectedRoute({ children, allowedRoles }) {
   const { user, loading } = useAuth()
@@ -40,6 +41,11 @@ function AppLayout() {
             </ProtectedRoute>
           } />
           <Route path="/auth" element={<Auth />} />
+          <Route path="/messages" element={
+            <ProtectedRoute allowedRoles={['organizer', 'artist', 'admin']}>
+              <Messages />
+            </ProtectedRoute>
+          } />
           <Route path="/contact" element={<Contact />} />
           <Route path="/dashboard" element={
             <ProtectedRoute allowedRoles={['organizer']}>

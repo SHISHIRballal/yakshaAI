@@ -38,6 +38,7 @@ export default function Navbar() {
           <li><NavLink to="/" end>Home</NavLink></li>
           <li><NavLink to="/artists">Artists</NavLink></li>
           <li><NavLink to="/recommendations">AI Picks</NavLink></li>
+          {user && <li><NavLink to="/messages">💬 Messages</NavLink></li>}
           <li><NavLink to="/contact">Contact</NavLink></li>
           {dashLink && <li><NavLink to={dashLink.href}>{dashLink.label}</NavLink></li>}
         </ul>

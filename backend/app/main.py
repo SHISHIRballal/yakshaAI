@@ -10,8 +10,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 
 from app.database import Base, engine, SessionLocal
-from app.models import user, artist, booking, review, availability  # noqa: F401 — registers ORM models
-from app.routers import auth, artists, bookings, reviews, recommendations, admin, chat
+from app.models import user, artist, booking, review, availability, message  # noqa: F401 — registers ORM models
+from app.routers import auth, artists, bookings, reviews, recommendations, admin, chat, messages
 from app.config import settings
 from app.utils.security import hash_password
 from app.utils.jwt_handler import decode_token
@@ -19,6 +19,8 @@ from app.models.user import User, UserRole
 from app.websocket_manager import manager
 from app.core.error_handlers import register_error_handlers
 from app.core.security_headers import SecurityHeadersMiddleware
+import socketio
+from app.socket_app import sio
 
 # ── Logging ──────────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -91,7 +93,7 @@ from slowapi.errors import RateLimitExceeded
 from app.core.limiter import limiter
 
 # ── App ───────────────────────────────────────────────────────────────────────
-app = FastAPI(
+fastapi_app = FastAPI(
     title="YakshaAI API",
     description="AI-powered Yakshagana Artist Booking Platform — Production",
     version="1.0.0",
@@ -100,16 +102,16 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+fastapi_app.state.limiter = limiter
+fastapi_app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # ── Error Handlers ────────────────────────────────────────────────────────────
-register_error_handlers(app)
+register_error_handlers(fastapi_app)
 
 # ── Middleware ────────────────────────────────────────────────────────────────
-app.add_middleware(SecurityHeadersMiddleware)
-app.add_middleware(GZipMiddleware, minimum_size=1000)
-app.add_middleware(
+fastapi_app.add_middleware(SecurityHeadersMiddleware)
+fastapi_app.add_middleware(GZipMiddleware, minimum_size=1000)
+fastapi_app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
     allow_credentials=True,
@@ -118,17 +120,20 @@ app.add_middleware(
 )
 
 # ── Routers ───────────────────────────────────────────────────────────────────
-app.include_router(auth.router)
-app.include_router(artists.router)
-app.include_router(bookings.router)
-app.include_router(reviews.router)
-app.include_router(recommendations.router)
-app.include_router(admin.router)
-app.include_router(chat.router)
+fastapi_app.include_router(auth.router)
+fastapi_app.include_router(artists.router)
+fastapi_app.include_router(bookings.router)
+fastapi_app.include_router(reviews.router)
+fastapi_app.include_router(recommendations.router)
+fastapi_app.include_router(admin.router)
+fastapi_app.include_router(chat.router)
+fastapi_app.include_router(messages.router)
+
+app = socketio.ASGIApp(sio, fastapi_app)
 
 
 # ── WebSocket — Real-Time Notifications ──────────────────────────────────────
-@app.websocket("/ws/notifications/{user_id}")
+@fastapi_app.websocket("/ws/notifications/{user_id}")
 async def websocket_notifications(
     websocket: WebSocket,
     user_id: int,
@@ -170,17 +175,17 @@ async def websocket_notifications(
 
 
 # ── Health & Root ─────────────────────────────────────────────────────────────
-@app.get("/")
+@fastapi_app.get("/")
 def root():
     return {"service": "YakshaAI API", "version": "1.0.0", "status": "running"}
 
 
-@app.get("/health")
+@fastapi_app.get("/health")
 def health():
     return {"status": "healthy", "service": "YakshaAI", "version": "1.0.0"}
 
 
-@app.get("/ws/status")
+@fastapi_app.get("/ws/status")
 def ws_status():
     return {
         "active_connections": manager.connected_count(),
