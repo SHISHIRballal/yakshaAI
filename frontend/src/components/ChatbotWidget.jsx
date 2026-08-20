@@ -1,10 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
 import './ChatbotWidget.css';
+import api from '../services/api';
 
-// ─── Groq Config ──────────────────────────────────────────────────────────────
-const GROQ_API_KEY = import.meta.env.VITE_GROQ_API_KEY;
-const GROQ_MODEL   = 'llama-3.3-70b-versatile';
-const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions';
+// ─── Chat Config ──────────────────────────────────────────────────────────────
+// Requests are proxied through the backend to keep the API key server-side
+const GROQ_MODEL   = 'openai/gpt-oss-120b';
 
 const SYSTEM_PROMPT = `You are **ಅಶರೀರವಾಣಿ** 🎭 — the official AI assistant for the YakshaAI platform, an intelligent booking and recommendation platform connecting Karnataka's traditional Yakshagana performers with event organizers.
 
@@ -98,7 +98,7 @@ const ChatbotWidget = () => {
     }
   }, [isOpen, isMinimized]);
 
-  // ── Send to Groq ──────────────────────────────────────────────────────────
+  // ── Send via Backend Proxy ─────────────────────────────────────────────────
   const sendToGroq = async (userText) => {
     // Append user turn to history
     historyRef.current = [
@@ -107,30 +107,17 @@ const ChatbotWidget = () => {
     ];
 
     try {
-      const response = await fetch(GROQ_API_URL, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${GROQ_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: GROQ_MODEL,
-          messages: [
-            { role: 'system', content: SYSTEM_PROMPT },
-            ...historyRef.current,
-          ],
-          temperature: 0.75,
-          max_tokens: 800,
-          stream: false,
-        }),
+      const response = await api.post('/chat', {
+        model: GROQ_MODEL,
+        messages: [
+          { role: 'system', content: SYSTEM_PROMPT },
+          ...historyRef.current,
+        ],
+        temperature: 0.75,
+        max_tokens: 800,
       });
 
-      if (!response.ok) {
-        const errData = await response.json().catch(() => ({}));
-        throw new Error(errData?.error?.message || `API error ${response.status}`);
-      }
-
-      const data = await response.json();
+      const data = response.data;
       const assistantText = data.choices?.[0]?.message?.content?.trim();
 
       if (!assistantText) throw new Error('Empty response from AI');

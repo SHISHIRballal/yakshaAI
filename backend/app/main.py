@@ -11,12 +11,14 @@ from fastapi.middleware.gzip import GZipMiddleware
 
 from app.database import Base, engine, SessionLocal
 from app.models import user, artist, booking, review, availability  # noqa: F401 — registers ORM models
-from app.routers import auth, artists, bookings, reviews, recommendations, admin
+from app.routers import auth, artists, bookings, reviews, recommendations, admin, chat
 from app.config import settings
 from app.utils.security import hash_password
 from app.utils.jwt_handler import decode_token
 from app.models.user import User, UserRole
 from app.websocket_manager import manager
+from app.core.error_handlers import register_error_handlers
+from app.core.security_headers import SecurityHeadersMiddleware
 
 # ── Logging ──────────────────────────────────────────────────────────────────
 logging.basicConfig(
@@ -94,7 +96,11 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# ── Error Handlers ────────────────────────────────────────────────────────────
+register_error_handlers(app)
+
 # ── Middleware ────────────────────────────────────────────────────────────────
+app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(GZipMiddleware, minimum_size=1000)
 app.add_middleware(
     CORSMiddleware,
@@ -111,6 +117,7 @@ app.include_router(bookings.router)
 app.include_router(reviews.router)
 app.include_router(recommendations.router)
 app.include_router(admin.router)
+app.include_router(chat.router)
 
 
 # ── WebSocket — Real-Time Notifications ──────────────────────────────────────

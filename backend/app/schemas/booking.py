@@ -42,6 +42,7 @@ class BookingOut(BaseModel):
     organizer_name: Optional[str] = None
     artist_name: Optional[str] = None
     artist_photo: Optional[str] = None
+    artist_id_user: Optional[int] = None
 
     class Config:
         from_attributes = True
