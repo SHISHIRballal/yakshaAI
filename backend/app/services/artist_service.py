@@ -47,7 +47,8 @@ def list_artists(
     query = db.query(ArtistProfile).join(User)
     
     if city:
-        query = query.filter(ArtistProfile.city.ilike(f"%{city}%"))
+        safe_city = city.replace("%", "\\%").replace("_", "\\_")
+        query = query.filter(ArtistProfile.city.ilike(f"%{safe_city}%"))
     if performance_style:
         query = query.filter(ArtistProfile.performance_style == performance_style)
     if min_rating is not None:
@@ -59,10 +60,11 @@ def list_artists(
     if is_verified is not None:
         query = query.filter(ArtistProfile.is_verified == is_verified)
     if search:
+        safe_search = search.replace("%", "\\%").replace("_", "\\_")
         query = query.filter(
-            User.name.ilike(f"%{search}%") |
-            ArtistProfile.specialization.ilike(f"%{search}%") |
-            ArtistProfile.city.ilike(f"%{search}%")
+            User.name.ilike(f"%{safe_search}%") |
+            ArtistProfile.specialization.ilike(f"%{safe_search}%") |
+            ArtistProfile.city.ilike(f"%{safe_search}%")
         )
     
     artists = query.offset(skip).limit(limit).all()

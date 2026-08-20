@@ -86,6 +86,10 @@ def _auto_seed_if_empty():
         db.close()
 
 
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from app.core.limiter import limiter
+
 # ── App ───────────────────────────────────────────────────────────────────────
 app = FastAPI(
     title="YakshaAI API",
@@ -95,6 +99,9 @@ app = FastAPI(
     redoc_url="/redoc" if settings.DEBUG else None,
     lifespan=lifespan,
 )
+
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # ── Error Handlers ────────────────────────────────────────────────────────────
 register_error_handlers(app)

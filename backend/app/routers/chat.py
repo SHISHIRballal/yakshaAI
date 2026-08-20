@@ -25,17 +25,20 @@ class ChatRequest(BaseModel):
     max_tokens: Optional[int] = 800
 
 
+from fastapi import APIRouter, Request
 from app.config import settings
+from app.core.limiter import limiter
 
 @router.post("")
-async def chat(request: ChatRequest):
+@limiter.limit("20/minute")
+async def chat(request: Request, chat_req: ChatRequest):
     """Proxy chat completion request to Groq API."""
-    messages = [{"role": m.role, "content": m.content} for m in request.messages]
-    model_name = request.model or settings.GROQ_MODEL
+    messages = [{"role": m.role, "content": m.content} for m in chat_req.messages]
+    model_name = chat_req.model or settings.GROQ_MODEL
     result = await proxy_chat(
         messages=messages,
         model=model_name,
-        temperature=request.temperature or 0.75,
-        max_tokens=request.max_tokens or 800,
+        temperature=chat_req.temperature or 0.75,
+        max_tokens=chat_req.max_tokens or 800,
     )
     return result

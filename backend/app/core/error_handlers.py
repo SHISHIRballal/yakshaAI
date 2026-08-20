@@ -15,7 +15,10 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
+from fastapi.encoders import jsonable_encoder
+
 def register_error_handlers(app: FastAPI) -> None:
+
     @app.exception_handler(AppException)
     async def app_exception_handler(request: Request, exc: AppException) -> JSONResponse:
         return JSONResponse(
@@ -32,11 +35,11 @@ def register_error_handlers(app: FastAPI) -> None:
     async def validation_exception_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
         return JSONResponse(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            content={
+            content=jsonable_encoder({
                 "detail": exc.errors(),
                 "error_code": "VALIDATION_ERROR",
                 "status_code": status.HTTP_422_UNPROCESSABLE_ENTITY
-            }
+            })
         )
 
     @app.exception_handler(Exception)
