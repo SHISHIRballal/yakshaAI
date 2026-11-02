@@ -3,18 +3,20 @@ from sqlalchemy.orm import Session
 from app.database import get_db
 from app.models.artist import ArtistProfile
 from app.models.user import User
-from app.schemas.recommendation import RecommendationRequest, RecommendationResponse, RecommendedArtist
-from app.ml.recommender import get_recommendations
+from app.schemas.recommendation import (
+    RecommendationRequest, RecommendationResponse, RecommendedArtist, MetricsResponse
+)
+from app.ml.ml_recommender import get_ml_recommendations, compute_algorithm_metrics
 
 router = APIRouter(prefix="/recommendations", tags=["Recommendations"])
 
 
 @router.post("", response_model=RecommendationResponse)
 def recommend_artists(request: RecommendationRequest, db: Session = Depends(get_db)):
-    """AI-powered artist recommendations based on preferences."""
+    """AI-powered artist recommendations using selectable ML algorithms."""
     artists = db.query(ArtistProfile).join(User).filter(ArtistProfile.is_available == True).all()
-    
-    results = get_recommendations(
+
+    results = get_ml_recommendations(
         artists=artists,
         budget=request.budget,
         city=request.city,
@@ -23,8 +25,9 @@ def recommend_artists(request: RecommendationRequest, db: Session = Depends(get_
         min_experience=request.min_experience,
         min_rating=request.min_rating,
         limit=request.limit,
+        algorithm=request.algorithm,
     )
-    
+
     recommended = []
     for r in results:
         a = r["artist"]
@@ -44,6 +47,28 @@ def recommend_artists(request: RecommendationRequest, db: Session = Depends(get_
             match_score=r["match_score"],
             match_reasons=r["match_reasons"],
             bio=a.bio,
+            algorithm=r.get("algorithm", request.algorithm),
         ))
-    
-    return RecommendationResponse(artists=recommended, total=len(recommended))
+
+    return RecommendationResponse(
+        artists=recommended,
+        total=len(recommended),
+        algorithm=request.algorithm,
+    )
+
+
+@router.get("/metrics", response_model=MetricsResponse)
+def get_algorithm_metrics():
+    """
+    Evaluate and compare KNN, Decision Tree, and Random Forest algorithms
+    on the synthetic dataset. Returns accuracy, precision, recall, F1, and
+    feature importance scores for each algorithm.
+    """
+    metrics = compute_algorithm_metrics()
+    return MetricsResponse(
+        algorithms=metrics["algorithms"],
+        feature_importance=metrics["feature_importance"],
+        dataset_size=metrics["dataset_size"],
+        positive_samples=metrics["positive_samples"],
+        negative_samples=metrics["negative_samples"],
+    )
