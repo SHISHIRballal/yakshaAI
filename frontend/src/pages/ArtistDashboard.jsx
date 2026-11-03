@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import api from '../services/api'
 import { useAuth } from '../context/AuthContext'
@@ -33,6 +33,11 @@ export default function ArtistDashboard() {
   const [saveMsg, setSaveMsg] = useState('')
   const [refreshKey, setRefreshKey] = useState(0)
 
+  const fileInputRef = useRef(null)
+  const [uploadingPhoto, setUploadingPhoto] = useState(false)
+  const [photoUrlInput, setPhotoUrlInput] = useState('')
+  const [photoError, setPhotoError] = useState('')
+
   // Auto-refresh bookings on any incoming notification
   useEffect(() => {
     if (notifications.length > 0) {
@@ -45,12 +50,16 @@ export default function ArtistDashboard() {
 
   useEffect(() => {
     Promise.all([
-      api.get('/auth/me').then(async res => {
-        const artist = await api.get(`/artists?limit=1&search=${encodeURIComponent(res.data.name)}`)
-        return artist.data[0] || null
+      api.get('/artists/me/profile').catch(async () => {
+        // Fallback search by name if me/profile fails
+        const me = await api.get('/auth/me')
+        const artist = await api.get(`/artists?limit=1&search=${encodeURIComponent(me.data.name)}`)
+        const items = artist.data?.items || artist.data || []
+        return { data: items[0] || null }
       }),
-      api.get('/bookings'),
-    ]).then(([artistProfile, bookingsRes]) => {
+      api.get('/bookings').catch(() => ({ data: [] })),
+    ]).then(([artistRes, bookingsRes]) => {
+      const artistProfile = artistRes?.data || null
       setProfile(artistProfile)
       if (artistProfile) {
         setProfileForm({
@@ -63,12 +72,72 @@ export default function ArtistDashboard() {
           languages: artistProfile.languages || 'Kannada',
           event_types: artistProfile.event_types || '',
           is_available: artistProfile.is_available !== false,
+          profile_photo_url: artistProfile.profile_photo_url || '',
         })
       }
-      setBookings(bookingsRes.data)
+      setBookings(bookingsRes?.data || [])
     }).catch(() => {})
       .finally(() => setLoading(false))
   }, [refreshKey])
+
+  const handleFileUpload = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    if (!file.type.startsWith('image/')) {
+      setPhotoError('Please select a valid image file (PNG, JPG, WEBP).')
+      return
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      setPhotoError('Image file size must be less than 5MB.')
+      return
+    }
+
+    setPhotoError('')
+    setUploadingPhoto(true)
+
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+
+      const res = await api.post('/upload/profile-photo', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
+
+      const newUrl = res.data.url
+      setProfile(p => p ? { ...p, profile_photo_url: newUrl } : p)
+      setProfileForm(f => ({ ...f, profile_photo_url: newUrl }))
+      setSaveMsg('✓ Profile picture uploaded successfully!')
+      setTimeout(() => setSaveMsg(''), 4000)
+    } catch (err) {
+      setPhotoError(err.response?.data?.detail || 'Failed to upload photo. Please try again.')
+    } finally {
+      setUploadingPhoto(false)
+    }
+  }
+
+  const handleSavePhotoUrl = async () => {
+    if (!photoUrlInput.trim()) return
+    setUploadingPhoto(true)
+    setPhotoError('')
+
+    try {
+      const res = await api.post('/upload/profile-photo-url', {
+        photo_url: photoUrlInput.trim(),
+      })
+      const newUrl = res.data.url
+      setProfile(p => p ? { ...p, profile_photo_url: newUrl } : p)
+      setProfileForm(f => ({ ...f, profile_photo_url: newUrl }))
+      setPhotoUrlInput('')
+      setSaveMsg('✓ Profile picture URL updated!')
+      setTimeout(() => setSaveMsg(''), 4000)
+    } catch {
+      setPhotoError('Failed to update photo URL.')
+    } finally {
+      setUploadingPhoto(false)
+    }
+  }
 
   const handleProfileSave = async (e) => {
     e.preventDefault()
@@ -82,7 +151,7 @@ export default function ArtistDashboard() {
         pricing_per_event: Number(profileForm.pricing_per_event),
       })
       setProfile({ ...profile, ...res.data })
-      setSaveMsg('Profile updated successfully!')
+      setSaveMsg('✓ Profile updated successfully!')
       setTimeout(() => setSaveMsg(''), 3000)
     } catch {
       setSaveMsg('Failed to save. Please try again.')
@@ -269,6 +338,97 @@ export default function ArtistDashboard() {
               <div className="dashboard-card-header">
                 <h2 className="dashboard-card-title">Edit Profile</h2>
               </div>
+
+              {/* Profile Photo Uploader */}
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 'var(--space-5)',
+                padding: 'var(--space-4)',
+                background: 'var(--color-surface-2)',
+                borderRadius: 'var(--radius-lg)',
+                border: '1px solid var(--color-border)',
+                marginBottom: 'var(--space-5)',
+                flexWrap: 'wrap',
+              }}>
+                <div style={{
+                  width: 80,
+                  height: 80,
+                  borderRadius: '50%',
+                  overflow: 'hidden',
+                  background: 'var(--color-surface-3)',
+                  border: '2px solid var(--color-gold)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '2.5rem',
+                  flexShrink: 0,
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
+                }}>
+                  {profile?.profile_photo_url ? (
+                    <img
+                      src={profile.profile_photo_url}
+                      alt={user?.name}
+                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                    />
+                  ) : (
+                    '🎭'
+                  )}
+                </div>
+
+                <div style={{ flex: 1, minWidth: 240 }}>
+                  <div style={{ fontWeight: 700, fontSize: '0.95rem', marginBottom: 4 }}>
+                    Profile Picture
+                  </div>
+                  <div style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', marginBottom: 'var(--space-3)' }}>
+                    Upload a portrait photo (JPG, PNG, or WEBP, max 5MB) or provide an image link.
+                  </div>
+
+                  <div style={{ display: 'flex', gap: 'var(--space-2)', flexWrap: 'wrap', alignItems: 'center' }}>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      style={{ display: 'none' }}
+                      onChange={handleFileUpload}
+                    />
+                    <button
+                      type="button"
+                      className="btn btn-primary btn-sm"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={uploadingPhoto}
+                    >
+                      {uploadingPhoto ? '⏳ Uploading...' : '📁 Upload Photo'}
+                    </button>
+
+                    <div style={{ display: 'flex', gap: 4, flex: 1, minWidth: 200 }}>
+                      <input
+                        type="url"
+                        className="form-input"
+                        placeholder="Or paste image URL (https://...)"
+                        value={photoUrlInput}
+                        onChange={(e) => setPhotoUrlInput(e.target.value)}
+                        style={{ fontSize: '0.8rem', padding: '4px 8px' }}
+                      />
+                      <button
+                        type="button"
+                        className="btn btn-outline btn-sm"
+                        onClick={handleSavePhotoUrl}
+                        disabled={uploadingPhoto || !photoUrlInput.trim()}
+                      >
+                        Apply
+                      </button>
+                    </div>
+                  </div>
+
+                  {photoError && (
+                    <div style={{ color: 'var(--color-error)', fontSize: '0.75rem', marginTop: 6 }}>
+                      {photoError}
+                    </div>
+                  )}
+                </div>
+              </div>
+
               <form onSubmit={handleProfileSave}>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 'var(--space-4)', marginBottom: 'var(--space-4)' }}>
                   <div className="form-group">

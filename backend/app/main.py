@@ -11,7 +11,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 
 from app.database import Base, engine, SessionLocal
 from app.models import user, artist, booking, review, availability, message  # noqa: F401 — registers ORM models
-from app.routers import auth, artists, bookings, reviews, recommendations, admin, chat, messages
+from app.routers import auth, artists, bookings, reviews, recommendations, admin, chat, messages, uploads
 from app.config import settings
 from app.utils.security import hash_password
 from app.utils.jwt_handler import decode_token
@@ -36,12 +36,28 @@ logger = logging.getLogger("yakshagai")
 async def lifespan(app: FastAPI):
     # Startup
     Base.metadata.create_all(bind=engine)
+    _migrate_db()
     _create_default_admin()
     _auto_seed_if_empty()
     logger.info("YakshaAI API started successfully")
     yield
     # Shutdown
     logger.info("YakshaAI API shutting down")
+
+
+def _migrate_db():
+    from sqlalchemy import text
+    db = SessionLocal()
+    try:
+        cols = [c[1] for c in db.execute(text("PRAGMA table_info(users)")).fetchall()]
+        if "profile_photo_url" not in cols:
+            db.execute(text("ALTER TABLE users ADD COLUMN profile_photo_url VARCHAR(500)"))
+            db.commit()
+            logger.info("Added profile_photo_url column to users table")
+    except Exception as e:
+        logger.warning(f"DB migration check note: {e}")
+    finally:
+        db.close()
 
 
 def _create_default_admin():
@@ -119,6 +135,14 @@ fastapi_app.add_middleware(
     allow_headers=["*"],
 )
 
+# ── Static File Mount (Uploads) ──────────────────────────────────────────────
+from fastapi.staticfiles import StaticFiles
+import os
+
+STATIC_DIR = os.path.join(os.path.dirname(os.path.dirname(__file__)), "static")
+os.makedirs(os.path.join(STATIC_DIR, "uploads"), exist_ok=True)
+fastapi_app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
 # ── Routers ───────────────────────────────────────────────────────────────────
 fastapi_app.include_router(auth.router)
 fastapi_app.include_router(artists.router)
@@ -128,6 +152,7 @@ fastapi_app.include_router(recommendations.router)
 fastapi_app.include_router(admin.router)
 fastapi_app.include_router(chat.router)
 fastapi_app.include_router(messages.router)
+fastapi_app.include_router(uploads.router)
 
 app = socketio.ASGIApp(sio, fastapi_app)
 

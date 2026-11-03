@@ -1,120 +1,15 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import api from '../services/api'
 import LoadingSpinner from '../components/LoadingSpinner'
 import { useAuth } from '../context/AuthContext'
+import VenueMapPicker from '../components/VenueMapPicker'
 
 const EVENT_TYPES = [
   'Temple Festival', 'Wedding Ceremony', 'Cultural Program',
   'Corporate Event', 'College Event', 'Private Function',
   'National Competition', 'International Festival',
 ]
-
-// Dynamically load Leaflet from CDN
-function useLeaflet(mapRef, onLocationSelect) {
-  const mapInstance = useRef(null)
-  const markerRef  = useRef(null)
-
-  useEffect(() => {
-    if (mapInstance.current) return // already initialized
-
-    // Inject Leaflet CSS
-    if (!document.getElementById('leaflet-css')) {
-      const link = document.createElement('link')
-      link.id   = 'leaflet-css'
-      link.rel  = 'stylesheet'
-      link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css'
-      document.head.appendChild(link)
-    }
-
-    // Inject Leaflet JS
-    const loadLeaflet = () => {
-      if (window.L) { initMap(); return }
-      const script = document.createElement('script')
-      script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'
-      script.onload = initMap
-      document.head.appendChild(script)
-    }
-
-    function initMap() {
-      if (!mapRef.current || mapInstance.current) return
-      const L = window.L
-
-      // Default center: Karnataka, India
-      const map = L.map(mapRef.current).setView([13.0, 76.5], 7)
-      mapInstance.current = map
-
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-        maxZoom: 19,
-      }).addTo(map)
-
-      // Custom icon
-      const icon = L.divIcon({
-        className: '',
-        html: `<div style="background:linear-gradient(135deg,#7c3aed,#db2777);width:32px;height:32px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);border:3px solid white;box-shadow:0 3px 12px rgba(0,0,0,0.4)"></div>`,
-        iconSize: [32, 32],
-        iconAnchor: [16, 32],
-      })
-
-      map.on('click', async (e) => {
-        const { lat, lng } = e.latlng
-        if (markerRef.current) markerRef.current.remove()
-        markerRef.current = L.marker([lat, lng], { icon }).addTo(map)
-
-        // Reverse geocode via Nominatim (free, no API key)
-        try {
-          const res = await fetch(
-            `https://nominatim.openstreetmap.org/reverse?lat=${lat}&lon=${lng}&format=json`,
-            { headers: { 'Accept-Language': 'en' } }
-          )
-          const data = await res.json()
-          const addr = data.address || {}
-          const venueName = [
-            addr.amenity || addr.building || addr.leisure || addr.tourism,
-            addr.road,
-            addr.suburb || addr.neighbourhood,
-            addr.city || addr.town || addr.village,
-          ].filter(Boolean).join(', ')
-
-          const city = addr.city || addr.town || addr.village || addr.county || ''
-          const mapLink = `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lng}#map=16/${lat}/${lng}`
-
-          onLocationSelect({
-            venue: venueName || `${lat.toFixed(5)}, ${lng.toFixed(5)}`,
-            venue_city: city,
-            venue_map_link: mapLink,
-            lat,
-            lng,
-          })
-
-          markerRef.current.bindPopup(
-            `<strong>${venueName || 'Selected Location'}</strong><br/>${city}<br/>
-             <a href="${mapLink}" target="_blank" style="color:#7c3aed">Open in Maps</a>`
-          ).openPopup()
-        } catch {
-          const mapLink = `https://www.openstreetmap.org/?mlat=${lat}&mlon=${lng}#map=16/${lat}/${lng}`
-          onLocationSelect({
-            venue: `${lat.toFixed(5)}, ${lng.toFixed(5)}`,
-            venue_city: '',
-            venue_map_link: mapLink,
-            lat,
-            lng,
-          })
-        }
-      })
-    }
-
-    loadLeaflet()
-
-    return () => {
-      if (mapInstance.current) {
-        mapInstance.current.remove()
-        mapInstance.current = null
-      }
-    }
-  }, [])
-}
 
 export default function Booking() {
   const { artistId } = useParams()
@@ -128,7 +23,7 @@ export default function Booking() {
   const [error, setError]             = useState('')
   const [unavailDates, setUnavailDates] = useState(new Set()) // Set of 'YYYY-MM-DD' strings
   const [dateWarning, setDateWarning]   = useState('')
-  const [mapMode, setMapMode]           = useState(false)
+  const [mapMode, setMapMode]           = useState(true)
 
   const [form, setForm] = useState({
     event_date: '',
@@ -142,15 +37,10 @@ export default function Booking() {
     organizer_notes: '',
   })
 
-  const mapRef = useRef(null)
-
-  // Callback when user clicks on map
+  // Callback when user selects location on map
   const handleLocationSelect = ({ venue, venue_city, venue_map_link }) => {
     setForm(f => ({ ...f, venue, venue_city, venue_map_link }))
   }
-
-  // Initialize Leaflet map
-  useLeaflet(mapRef, handleLocationSelect)
 
   // Fetch artist + unavailable dates
   useEffect(() => {
@@ -325,36 +215,19 @@ export default function Booking() {
                   className={`btn btn-sm ${mapMode ? 'btn-primary' : 'btn-outline'}`}
                   onClick={() => setMapMode(m => !m)}
                 >
-                  {mapMode ? '✏️ Type Manually' : '🗺️ Pick on Map'}
+                  {mapMode ? '🗺️ Interactive Map Active' : '🗺️ Open Map Picker'}
                 </button>
               </div>
 
               {/* MAP MODE */}
               {mapMode && (
-                <div style={{ marginBottom: 'var(--space-4)' }}>
-                  <p style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem', marginBottom: 'var(--space-3)' }}>
-                    Click anywhere on the map to set your event venue. Address will auto-fill below.
-                  </p>
-                  <div
-                    ref={mapRef}
-                    style={{
-                      height: 320,
-                      borderRadius: 'var(--radius-lg)',
-                      border: '2px solid var(--color-border)',
-                      overflow: 'hidden',
-                      position: 'relative',
-                      zIndex: 1,
-                    }}
+                <div style={{ marginBottom: 'var(--space-5)' }}>
+                  <VenueMapPicker
+                    selectedVenue={form.venue}
+                    selectedCity={form.venue_city}
+                    mapLink={form.venue_map_link}
+                    onLocationSelect={handleLocationSelect}
                   />
-                  {form.venue_map_link && (
-                    <div style={{ marginTop: 'var(--space-3)', display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>Map link generated:</span>
-                      <a href={form.venue_map_link} target="_blank" rel="noopener noreferrer"
-                        style={{ fontSize: '0.8rem', color: 'var(--color-primary)', textDecoration: 'none', fontWeight: 600 }}>
-                        📍 View on OpenStreetMap →
-                      </a>
-                    </div>
-                  )}
                 </div>
               )}
 

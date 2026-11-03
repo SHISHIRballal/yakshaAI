@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import api from '../services/api'
 import { useAuth } from '../context/AuthContext'
@@ -31,6 +31,40 @@ export default function UserDashboard() {
   const [filterStatus, setFilterStatus] = useState('all')
   const [toast, setToast] = useState('')
   const [refreshKey, setRefreshKey] = useState(0)
+
+  const fileInputRef = useRef(null)
+  const [avatarUrl, setAvatarUrl] = useState(user?.profile_photo_url || '')
+  const [uploadingAvatar, setUploadingAvatar] = useState(false)
+
+  const handleAvatarUpload = async (e) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    if (!file.type.startsWith('image/')) {
+      showToast('Please select a valid image file.')
+      return
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      showToast('Image file size must be less than 5MB.')
+      return
+    }
+
+    setUploadingAvatar(true)
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      const res = await api.post('/upload/profile-photo', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
+      setAvatarUrl(res.data.url)
+      showToast('✓ Profile picture updated!')
+    } catch {
+      showToast('Failed to upload profile picture.')
+    } finally {
+      setUploadingAvatar(false)
+    }
+  }
 
   // Auto-refresh when artist responds to our booking
   useEffect(() => {
@@ -142,8 +176,56 @@ export default function UserDashboard() {
         {/* Sidebar */}
         <aside className="dashboard-sidebar">
           <div style={{ marginBottom: 'var(--space-6)', paddingBottom: 'var(--space-5)', borderBottom: '1px solid var(--color-border)' }}>
-            <div style={{ width: 48, height: 48, borderRadius: '50%', background: 'linear-gradient(135deg, var(--color-primary), var(--color-gold-dark))', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.25rem', marginBottom: 'var(--space-3)' }}>
-              👤
+            <div style={{ position: 'relative', width: 56, height: 56, marginBottom: 'var(--space-3)' }}>
+              <div style={{
+                width: 56,
+                height: 56,
+                borderRadius: '50%',
+                overflow: 'hidden',
+                background: 'linear-gradient(135deg, var(--color-primary), var(--color-gold-dark))',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '1.5rem',
+                border: '2px solid var(--color-gold)',
+              }}>
+                {avatarUrl ? (
+                  <img src={avatarUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                ) : (
+                  '👤'
+                )}
+              </div>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                style={{ display: 'none' }}
+                onChange={handleAvatarUpload}
+              />
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploadingAvatar}
+                title="Change profile picture"
+                style={{
+                  position: 'absolute',
+                  bottom: -2,
+                  right: -2,
+                  width: 22,
+                  height: 22,
+                  borderRadius: '50%',
+                  background: 'var(--color-surface-1)',
+                  border: '1px solid var(--color-gold)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '0.65rem',
+                  cursor: 'pointer',
+                  color: 'var(--color-gold)',
+                }}
+              >
+                {uploadingAvatar ? '⏳' : '📷'}
+              </button>
             </div>
             <div style={{ fontWeight: 700 }}>{user?.name}</div>
             <div style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>{user?.email}</div>

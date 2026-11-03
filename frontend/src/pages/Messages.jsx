@@ -12,6 +12,7 @@ export default function Messages() {
   const navigate = useNavigate();
 
   const targetUserId = searchParams.get('user_id');
+  const targetArtistId = searchParams.get('artist_id');
 
   const [conversations, setConversations] = useState([]);
   const [activeUser, setActiveUser] = useState(null);
@@ -27,6 +28,8 @@ export default function Messages() {
   const socketRef = useRef(null);
   const messagesEndRef = useRef(null);
   const typingTimeoutRef = useRef(null);
+  const chatInputRef = useRef(null);
+  const activeUserIdRef = useRef(null);
 
   // Auto-scroll to bottom
   const scrollToBottom = () => {
@@ -136,15 +139,30 @@ export default function Messages() {
     fetchConversations();
   }, []);
 
-  // 3. Select active user (from conversations or query param targetUserId)
+  // 3. Select active user (from query params or fallback to first conversation)
   useEffect(() => {
     if (loading) return;
 
-    if (targetUserId) {
-      const targetId = parseInt(targetUserId, 10);
-      const existing = conversations.find((c) => c.other_user_id === targetId);
+    if (targetUserId || targetArtistId) {
+      const isArtistParam = Boolean(targetArtistId && !targetUserId);
+      const queryId = parseInt(targetUserId || targetArtistId, 10);
+      if (isNaN(queryId)) return;
+
+      if (user && user.id === queryId) {
+        setError('You cannot message yourself.');
+        return;
+      }
+
+      // If active conversation already matches this user/artist, avoid re-fetching!
+      if (activeUserIdRef.current === queryId) {
+        return;
+      }
+
+      // Check existing conversations first
+      const existing = conversations.find((c) => c.other_user_id === queryId);
 
       if (existing) {
+        activeUserIdRef.current = existing.other_user_id;
         selectConversation({
           id: existing.other_user_id,
           name: existing.other_user_name,
@@ -152,21 +170,36 @@ export default function Messages() {
           photo: existing.other_user_photo,
         });
       } else {
-        // Fetch user info via API or placeholder
-        api.get(`/artists`).then((res) => {
-          const found = res.data.find((a) => a.user_id === targetId || a.id === targetId);
-          if (found) {
-            selectConversation({
-              id: found.user_id,
-              name: found.user_name,
-              role: 'artist',
-              photo: found.profile_photo_url,
-            });
-          }
-        }).catch(() => {});
+        // Fetch recipient info from backend resolver
+        const endpoint = isArtistParam
+          ? `/messages/recipient/${queryId}?type=artist`
+          : `/messages/recipient/${queryId}`;
+
+        api
+          .get(endpoint)
+          .then((res) => {
+            const data = res.data;
+            if (data && data.id) {
+              activeUserIdRef.current = data.id;
+              selectConversation({
+                id: data.id,
+                name: data.name,
+                role: data.role,
+                photo: data.photo,
+                specialization: data.specialization,
+                city: data.city,
+                artist_id: data.artist_id,
+              });
+            }
+          })
+          .catch((err) => {
+            console.error('Failed to load recipient profile:', err);
+            setError('Could not load artist profile for messaging.');
+          });
       }
-    } else if (conversations.length > 0 && !activeUser) {
+    } else if (conversations.length > 0 && !activeUserIdRef.current) {
       const first = conversations[0];
+      activeUserIdRef.current = first.other_user_id;
       selectConversation({
         id: first.other_user_id,
         name: first.other_user_name,
@@ -174,13 +207,17 @@ export default function Messages() {
         photo: first.other_user_photo,
       });
     }
-  }, [targetUserId, conversations, loading]);
+  }, [targetUserId, targetArtistId, loading]);
 
   // 4. Load messages for selected conversation
   const selectConversation = async (otherUser) => {
+    if (!otherUser || !otherUser.id) return;
+    activeUserIdRef.current = otherUser.id;
     setActiveUser(otherUser);
     setIsTyping(false);
     setHistoryLoading(true);
+    setError('');
+    setTimeout(() => chatInputRef.current?.focus(), 150);
 
     try {
       const res = await api.get(`/messages/${otherUser.id}`);
@@ -190,7 +227,12 @@ export default function Messages() {
       if (socketRef.current) {
         socketRef.current.emit('mark_read', { sender_id: otherUser.id });
       }
-      fetchConversations();
+      // Update local unread state without triggering full list refresh
+      setConversations((prev) =>
+        prev.map((c) =>
+          c.other_user_id === otherUser.id ? { ...c, unread_count: 0 } : c
+        )
+      );
     } catch (err) {
       setError('Failed to load chat history');
     } finally {
@@ -253,6 +295,22 @@ export default function Messages() {
 
   if (loading) return <LoadingSpinner label="Loading chat..." />;
 
+  // Synthesize new conversation item if activeUser isn't yet in saved conversations
+  const displayConversations = [...conversations];
+  if (activeUser && !conversations.some((c) => c.other_user_id === activeUser.id)) {
+    displayConversations.unshift({
+      id: `temp-${activeUser.id}`,
+      other_user_id: activeUser.id,
+      other_user_name: activeUser.name,
+      other_user_role: activeUser.role,
+      other_user_photo: activeUser.photo,
+      last_message: activeUser.specialization ? `🎭 ${activeUser.specialization}` : 'New conversation',
+      last_message_at: null,
+      unread_count: 0,
+      is_new: true,
+    });
+  }
+
   return (
     <div className="messages-page container">
       {!isConnected && (
@@ -269,10 +327,10 @@ export default function Messages() {
           </div>
 
           <div className="conversations-list">
-            {conversations.length === 0 ? (
+            {displayConversations.length === 0 ? (
               <div className="empty-sidebar">No conversations yet</div>
             ) : (
-              conversations.map((c) => (
+              displayConversations.map((c) => (
                 <div
                   key={c.id}
                   className={`conversation-item ${activeUser?.id === c.other_user_id ? 'active' : ''}`}
@@ -297,11 +355,13 @@ export default function Messages() {
                   <div className="conv-info">
                     <div className="conv-top">
                       <span className="conv-name">{c.other_user_name}</span>
-                      {c.last_message_at && (
+                      {c.last_message_at ? (
                         <span className="conv-time">
                           {new Date(c.last_message_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                         </span>
-                      )}
+                      ) : c.is_new ? (
+                        <span className="badge badge-gold" style={{ fontSize: '0.65rem', padding: '1px 6px' }}>New</span>
+                      ) : null}
                     </div>
                     <div className="conv-bottom">
                       <span className="conv-preview">{c.last_message || 'Started a conversation'}</span>
@@ -329,11 +389,19 @@ export default function Messages() {
                     className="avatar-img"
                   />
                   <div>
-                    <h4 className="chat-username">{activeUser.name}</h4>
-                    <span className="user-role-badge">{activeUser.role}</span>
-                    <span className={`status-label ${onlineUsers[activeUser.id] ? 'online' : ''}`}>
-                      {onlineUsers[activeUser.id] ? '🟢 Online' : '⚪ Offline'}
-                    </span>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                      <h4 className="chat-username" style={{ margin: 0 }}>{activeUser.name}</h4>
+                      <span className="user-role-badge">{activeUser.role}</span>
+                      <span className={`status-label ${onlineUsers[activeUser.id] ? 'online' : ''}`}>
+                        {onlineUsers[activeUser.id] ? '🟢 Online' : '⚪ Offline'}
+                      </span>
+                    </div>
+                    {(activeUser.specialization || activeUser.city) && (
+                      <div style={{ fontSize: '0.75rem', color: 'var(--color-gold)', marginTop: 3 }}>
+                        {activeUser.specialization && <span>🎭 {activeUser.specialization}</span>}
+                        {activeUser.city && <span style={{ marginLeft: 8 }}>📍 {activeUser.city}</span>}
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -343,8 +411,14 @@ export default function Messages() {
                 {historyLoading ? (
                   <LoadingSpinner label="Loading messages..." />
                 ) : messages.length === 0 ? (
-                  <div className="chat-empty">
-                    <span>👋 Say hello to <strong>{activeUser.name}</strong>!</span>
+                  <div className="chat-empty" style={{ textAlign: 'center', padding: 'var(--space-8)' }}>
+                    <div style={{ fontSize: '2.5rem', marginBottom: 'var(--space-3)' }}>🎭</div>
+                    <h4 style={{ color: 'var(--color-gold)', marginBottom: 'var(--space-1)' }}>
+                      Message {activeUser.name}
+                    </h4>
+                    <p style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem', maxWidth: 360, margin: '0 auto' }}>
+                      Direct message thread initialized. Send a message below to inquire about dates, availability, or custom prasangas!
+                    </p>
                   </div>
                 ) : (
                   messages.map((m) => {
@@ -388,6 +462,7 @@ export default function Messages() {
               <form className="chat-input-bar" onSubmit={handleSendMessage}>
                 {error && <div className="chat-error-toast">{error}</div>}
                 <input
+                  ref={chatInputRef}
                   type="text"
                   placeholder={`Write a message to ${activeUser.name}...`}
                   value={inputContent}

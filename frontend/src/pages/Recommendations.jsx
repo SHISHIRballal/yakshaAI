@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import api from '../services/api'
 import LoadingSpinner from '../components/LoadingSpinner'
+import { useAuth } from '../context/AuthContext'
 
 const CITIES = ['Udupi', 'Mangaluru', 'Dharwad', 'Bengaluru', 'Kundapur', 'Karwar', 'Sirsi', 'Honavar', 'Mysuru', 'Hubli']
 const EVENT_TYPES = ['Temple Festival', 'Wedding Ceremony', 'Cultural Program', 'Corporate Event', 'College Event', 'National Competition', 'International Festival']
@@ -286,6 +287,7 @@ function ConfusionMatrix({ metrics, color }) {
 // ─── Main Page ────────────────────────────────────────────────
 export default function Recommendations() {
   const navigate = useNavigate()
+  const { user } = useAuth()
   const chartsRef = useRef(null)
 
   const [form, setForm] = useState({
@@ -713,6 +715,21 @@ export default function Recommendations() {
 
                           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                             <button className="btn btn-primary btn-sm" onClick={e => { e.stopPropagation(); navigate(`/book/${artist.id}`) }}>Book</button>
+                            <button
+                              className="btn btn-outline btn-sm"
+                              onClick={e => {
+                                e.stopPropagation();
+                                const target = artist.user_id ? `user_id=${artist.user_id}` : `artist_id=${artist.id}`;
+                                if (!user) {
+                                  navigate(`/auth?redirect=/messages?${target}`);
+                                } else {
+                                  navigate(`/messages?${target}`);
+                                }
+                              }}
+                              title="Direct message artist"
+                            >
+                              💬 Message
+                            </button>
                             <button className="btn btn-outline btn-sm" onClick={e => { e.stopPropagation(); navigate(`/artists/${artist.id}`) }}>View</button>
                           </div>
                         </div>

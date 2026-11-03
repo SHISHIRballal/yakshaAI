@@ -30,6 +30,7 @@ class UserOut(BaseModel):
     email: str
     role: UserRole
     phone: Optional[str] = None
+    profile_photo_url: Optional[str] = None
     is_active: bool
     created_at: Optional[datetime] = None
 

@@ -125,9 +125,17 @@ export default function ArtistDetails() {
                   </button>
                 )}
                 {!user && (
-                  <Link to="/auth" className="btn btn-primary btn-lg">
-                    Sign In to Book
-                  </Link>
+                  <>
+                    <button
+                      className="btn btn-secondary btn-lg"
+                      onClick={() => navigate(`/auth?redirect=/messages?user_id=${artist.user_id}`)}
+                    >
+                      💬 Message Artist
+                    </button>
+                    <Link to="/auth" className="btn btn-primary btn-lg">
+                      Sign In to Book
+                    </Link>
+                  </>
                 )}
                 <button className="btn btn-outline btn-lg" onClick={() => navigator.share?.({ title: artist.user_name, url: window.location.href }) }>
                   🔗 Share Profile

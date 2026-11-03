@@ -32,6 +32,20 @@ def list_artists(
     )
 
 
+@router.get("/me/profile", response_model=ArtistOut)
+def get_my_artist_profile(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Get the artist profile belonging to the authenticated user."""
+    from app.models.artist import ArtistProfile
+    from app.core.exceptions import NotFoundException
+    artist = db.query(ArtistProfile).filter(ArtistProfile.user_id == current_user.id).first()
+    if not artist:
+        raise NotFoundException(detail="Artist profile not found")
+    return artist_service.enrich_artist(artist)
+
+
 @router.get("/{artist_id}", response_model=ArtistOut)
 def get_artist(artist_id: int, db: Session = Depends(get_db)):
     return artist_service.get_artist(db, artist_id)

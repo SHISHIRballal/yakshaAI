@@ -1,8 +1,10 @@
 import React from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useAuth } from '../context/AuthContext'
 
 export default function ArtistCard({ artist }) {
   const navigate = useNavigate()
+  const { user } = useAuth()
 
   const stars = (rating) => {
     return Array.from({ length: 5 }, (_, i) => (
@@ -85,15 +87,33 @@ export default function ArtistCard({ artist }) {
               <span> / event</span>
             </div>
           </div>
-          <button
-            className="btn btn-primary btn-sm"
-            onClick={(e) => {
-              e.stopPropagation()
-              navigate(`/book/${artist.id}`)
-            }}
-          >
-            Book
-          </button>
+          <div style={{ display: 'flex', gap: 'var(--space-2)' }}>
+            <button
+              className="btn btn-outline btn-sm"
+              title={`Message ${artist.user_name || 'Artist'}`}
+              onClick={(e) => {
+                e.stopPropagation()
+                const target = artist.user_id ? `user_id=${artist.user_id}` : `artist_id=${artist.id}`
+                if (!user) {
+                  navigate(`/auth?redirect=/messages?${target}`)
+                } else {
+                  navigate(`/messages?${target}`)
+                }
+              }}
+              style={{ display: 'flex', alignItems: 'center', gap: 4 }}
+            >
+              💬 Message
+            </button>
+            <button
+              className="btn btn-primary btn-sm"
+              onClick={(e) => {
+                e.stopPropagation()
+                navigate(`/book/${artist.id}`)
+              }}
+            >
+              Book
+            </button>
+          </div>
         </div>
       </div>
     </div>
