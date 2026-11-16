@@ -41,18 +41,19 @@ def fire_notification(user_id: int, payload: dict):
         logger.warning(f"[WS] Notification to user {user_id} failed: {exc}")
 
 def create_booking(db: Session, current_user: User, booking_data: BookingCreate) -> dict:
-    if current_user.role == "admin":
-        raise ForbiddenException(detail="Admins cannot create bookings")
-
     artist = db.query(ArtistProfile).filter(ArtistProfile.id == booking_data.artist_id).first()
+    if not artist:
+        artist = db.query(ArtistProfile).filter(ArtistProfile.user_id == booking_data.artist_id).first()
     if not artist:
         raise NotFoundException(detail="Artist not found")
 
     if current_user.role == "artist" and artist.user_id == current_user.id:
         raise BadRequestException(detail="Cannot book yourself")
 
+    target_artist_id = artist.id
+
     blocked = db.query(Availability).filter(
-        Availability.artist_id == booking_data.artist_id,
+        Availability.artist_id == target_artist_id,
         Availability.date == booking_data.event_date,
         Availability.is_available == False,
     ).first()
@@ -64,7 +65,7 @@ def create_booking(db: Session, current_user: User, booking_data: BookingCreate)
 
     booking = Booking(
         organizer_id=current_user.id,
-        artist_id=booking_data.artist_id,
+        artist_id=target_artist_id,
         event_date=booking_data.event_date,
         event_type=booking_data.event_type,
         venue=booking_data.venue,

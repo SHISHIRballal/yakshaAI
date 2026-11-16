@@ -28,8 +28,10 @@ export default function Auth() {
     setLoading(true)
     setError('')
     try {
+      const redirectUrl = searchParams.get('redirect')
       const user = await login(loginForm.email, loginForm.password)
-      if (user.role === 'admin') navigate('/admin')
+      if (redirectUrl) navigate(redirectUrl)
+      else if (user.role === 'admin') navigate('/admin')
       else if (user.role === 'artist') navigate('/artist/dashboard')
       else navigate('/dashboard')
     } catch (err) {
@@ -52,8 +54,10 @@ export default function Auth() {
     }
     setLoading(true)
     try {
+      const redirectUrl = searchParams.get('redirect')
       const user = await register(regForm.name, regForm.email, regForm.password, regForm.role, regForm.phone)
-      if (user.role === 'artist') navigate('/artist/dashboard')
+      if (redirectUrl) navigate(redirectUrl)
+      else if (user.role === 'artist') navigate('/artist/dashboard')
       else navigate('/dashboard')
     } catch (err) {
       setError(err.response?.data?.detail || 'Registration failed. Email may already be in use.')

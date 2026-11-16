@@ -111,30 +111,33 @@ export default function ArtistDetails() {
               </div>
 
               <div style={{ display: 'flex', gap: 'var(--space-3)', flexWrap: 'wrap' }}>
-                {(user?.role === 'organizer' || user?.role === 'admin') && (
-                  <button className="btn btn-primary btn-lg" onClick={() => navigate(`/book/${id}`)}>
-                    📋 Book This Artist
-                  </button>
-                )}
                 {user && user.id !== artist.user_id && (
-                  <button
-                    className="btn btn-secondary btn-lg"
-                    onClick={() => navigate(`/messages?user_id=${artist.user_id}`)}
-                  >
-                    💬 Message Artist
-                  </button>
+                  <>
+                    <button className="btn btn-primary btn-lg" onClick={() => navigate(`/book/${artist.id}`)}>
+                      📋 Book This Artist
+                    </button>
+                    <button
+                      className="btn btn-secondary btn-lg"
+                      onClick={() => navigate(`/messages?user_id=${artist.user_id}`)}
+                    >
+                      💬 Message Artist
+                    </button>
+                  </>
                 )}
                 {!user && (
                   <>
+                    <button
+                      className="btn btn-primary btn-lg"
+                      onClick={() => navigate(`/auth?redirect=/book/${artist.id}`)}
+                    >
+                      📋 Book This Artist
+                    </button>
                     <button
                       className="btn btn-secondary btn-lg"
                       onClick={() => navigate(`/auth?redirect=/messages?user_id=${artist.user_id}`)}
                     >
                       💬 Message Artist
                     </button>
-                    <Link to="/auth" className="btn btn-primary btn-lg">
-                      Sign In to Book
-                    </Link>
                   </>
                 )}
                 <button className="btn btn-outline btn-lg" onClick={() => navigator.share?.({ title: artist.user_name, url: window.location.href }) }>

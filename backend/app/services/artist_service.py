@@ -122,6 +122,8 @@ def list_artists(
 def get_artist(db: Session, artist_id: int) -> dict:
     artist = db.query(ArtistProfile).filter(ArtistProfile.id == artist_id).first()
     if not artist:
+        artist = db.query(ArtistProfile).filter(ArtistProfile.user_id == artist_id).first()
+    if not artist:
         raise NotFoundException(detail="Artist not found")
     return enrich_artist(artist)
 
@@ -146,7 +148,11 @@ def update_artist(
     return enrich_artist(artist)
 
 def get_availability(db: Session, artist_id: int, month: Optional[str] = None) -> list:
-    query = db.query(Availability).filter(Availability.artist_id == artist_id)
+    artist = db.query(ArtistProfile).filter(ArtistProfile.id == artist_id).first()
+    if not artist:
+        artist = db.query(ArtistProfile).filter(ArtistProfile.user_id == artist_id).first()
+    target_id = artist.id if artist else artist_id
+    query = db.query(Availability).filter(Availability.artist_id == target_id)
     if month:
         query = query.filter(Availability.date.startswith(month))
     slots = query.all()

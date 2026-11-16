@@ -276,7 +276,10 @@ export default function AdminDashboard() {
                   {analytics ? analytics.total_artists - analytics.verified_artists : 0} pending
                 </span>
               </div>
-              <ArtistVerificationList />
+              <ArtistVerificationList onToggle={async () => {
+                const res = await api.get('/admin/analytics')
+                setAnalytics(res.data)
+              }} />
             </div>
           )}
         </div>
@@ -285,57 +288,136 @@ export default function AdminDashboard() {
   )
 }
 
-function ArtistVerificationList() {
+function ArtistVerificationList({ onToggle }) {
   const [artists, setArtists] = useState([])
   const [loading, setLoading] = useState(true)
+  const [filter, setFilter] = useState('all') // 'all', 'pending', 'verified'
+  const [artistSearch, setArtistSearch] = useState('')
+
+  const loadArtists = async () => {
+    try {
+      const res = await api.get('/artists?limit=50')
+      const items = Array.isArray(res.data) ? res.data : (res.data?.items || [])
+      setArtists(items)
+    } catch {
+      setArtists([])
+    } finally {
+      setLoading(false)
+    }
+  }
 
   useEffect(() => {
-    api.get('/artists?limit=50').then(res => setArtists(res.data)).finally(() => setLoading(false))
+    loadArtists()
   }, [])
 
   const toggle = async (artist) => {
-    await api.put(`/admin/artists/${artist.id}/verify`)
-    setArtists(a => a.map(ar => ar.id === artist.id ? { ...ar, is_verified: !ar.is_verified } : ar))
+    try {
+      const res = await api.put(`/admin/artists/${artist.id}/verify`)
+      const updatedVerified = res.data?.is_verified !== undefined ? res.data.is_verified : !artist.is_verified
+      setArtists(a => a.map(ar => ar.id === artist.id ? { ...ar, is_verified: updatedVerified } : ar))
+      onToggle?.()
+    } catch (err) {
+      console.error('Failed to toggle verification:', err)
+    }
   }
 
   if (loading) return <LoadingSpinner />
 
+  const filteredArtists = artists.filter(a => {
+    if (filter === 'pending' && a.is_verified) return false
+    if (filter === 'verified' && !a.is_verified) return false
+    if (artistSearch) {
+      const q = artistSearch.toLowerCase()
+      return (
+        (a.user_name && a.user_name.toLowerCase().includes(q)) ||
+        (a.specialization && a.specialization.toLowerCase().includes(q)) ||
+        (a.city && a.city.toLowerCase().includes(q))
+      )
+    }
+    return true
+  })
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-3)' }}>
-      {artists.map(artist => (
-        <div key={artist.id} style={{
-          display: 'flex', alignItems: 'center', gap: 'var(--space-4)',
-          padding: 'var(--space-4)', background: 'var(--color-surface-2)',
-          borderRadius: 'var(--radius-lg)', border: '1px solid var(--color-border)',
-          flexWrap: 'wrap',
-        }}>
-          <div style={{
-            width: 44, height: 44, borderRadius: 'var(--radius-md)', overflow: 'hidden',
-            background: 'var(--color-surface)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.25rem',
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-4)' }}>
+      {/* Controls: Search and Filter Tabs */}
+      <div style={{ display: 'flex', gap: 'var(--space-3)', flexWrap: 'wrap', alignItems: 'center', justifyContent: 'space-between' }}>
+        <input
+          type="text"
+          className="form-input"
+          placeholder="Search artist by name, style, or city..."
+          value={artistSearch}
+          onChange={e => setArtistSearch(e.target.value)}
+          style={{ maxWidth: 320, fontSize: '0.85rem' }}
+        />
+
+        <div style={{ display: 'flex', background: 'var(--color-surface-2)', borderRadius: 'var(--radius-md)', padding: 2, gap: 2 }}>
+          {[
+            { id: 'all', label: `All (${artists.length})` },
+            { id: 'pending', label: `Pending (${artists.filter(a => !a.is_verified).length})` },
+            { id: 'verified', label: `Verified (${artists.filter(a => a.is_verified).length})` },
+          ].map(t => (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => setFilter(t.id)}
+              style={{
+                padding: '4px 12px',
+                borderRadius: 'var(--radius-sm)',
+                border: 'none',
+                cursor: 'pointer',
+                fontSize: '0.78rem',
+                fontWeight: 600,
+                background: filter === t.id ? 'var(--color-surface-3)' : 'none',
+                color: filter === t.id ? 'var(--color-gold)' : 'var(--color-text-muted)',
+                transition: 'all var(--transition-fast)',
+              }}
+            >
+              {t.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {filteredArtists.length === 0 ? (
+        <div style={{ padding: 'var(--space-8)', textAlign: 'center', color: 'var(--color-text-muted)' }}>
+          No artists matching the selected filter.
+        </div>
+      ) : (
+        filteredArtists.map(artist => (
+          <div key={artist.id} style={{
+            display: 'flex', alignItems: 'center', gap: 'var(--space-4)',
+            padding: 'var(--space-4)', background: 'var(--color-surface-2)',
+            borderRadius: 'var(--radius-lg)', border: '1px solid var(--color-border)',
+            flexWrap: 'wrap',
           }}>
-            {artist.profile_photo_url
-              ? <img src={artist.profile_photo_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="" />
-              : '🎭'}
-          </div>
-          <div style={{ flex: 1, minWidth: 200 }}>
-            <div style={{ fontWeight: 700 }}>{artist.user_name}</div>
-            <div style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
-              {artist.performance_style} · {artist.specialization} · {artist.city} · {artist.experience_years} yrs
+            <div style={{
+              width: 44, height: 44, borderRadius: 'var(--radius-md)', overflow: 'hidden',
+              background: 'var(--color-surface)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.25rem',
+            }}>
+              {artist.profile_photo_url
+                ? <img src={artist.profile_photo_url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt="" />
+                : '🎭'}
+            </div>
+            <div style={{ flex: 1, minWidth: 200 }}>
+              <div style={{ fontWeight: 700 }}>{artist.user_name}</div>
+              <div style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
+                {artist.performance_style} · {artist.specialization} · {artist.city} · {artist.experience_years} yrs
+              </div>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
+              <span className={`badge ${artist.is_verified ? 'badge-success' : 'badge-warning'}`}>
+                {artist.is_verified ? '✓ Verified' : '⏳ Unverified'}
+              </span>
+              <button
+                className={`btn btn-sm ${artist.is_verified ? 'btn-ghost' : 'btn-primary'}`}
+                onClick={() => toggle(artist)}
+              >
+                {artist.is_verified ? 'Revoke' : 'Verify'}
+              </button>
             </div>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-3)' }}>
-            <span className={`badge ${artist.is_verified ? 'badge-success' : 'badge-warning'}`}>
-              {artist.is_verified ? '✓ Verified' : '⏳ Unverified'}
-            </span>
-            <button
-              className={`btn btn-sm ${artist.is_verified ? 'btn-ghost' : 'btn-primary'}`}
-              onClick={() => toggle(artist)}
-            >
-              {artist.is_verified ? 'Revoke' : 'Verify'}
-            </button>
-          </div>
-        </div>
-      ))}
+        ))
+      )}
     </div>
   )
 }

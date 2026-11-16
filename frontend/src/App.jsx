@@ -1,5 +1,5 @@
 import React from 'react'
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { NotificationProvider } from './context/NotificationContext'
 import Navbar from './components/Navbar'
@@ -19,8 +19,9 @@ import Messages from './pages/Messages'
 
 function ProtectedRoute({ children, allowedRoles }) {
   const { user, loading } = useAuth()
+  const location = useLocation()
   if (loading) return <div className="loading-center"><div className="spinner" /></div>
-  if (!user) return <Navigate to="/auth" replace />
+  if (!user) return <Navigate to={`/auth?redirect=${encodeURIComponent(location.pathname + location.search)}`} replace />
   if (allowedRoles && !allowedRoles.includes(user.role)) return <Navigate to="/" replace />
   return children
 }
@@ -36,7 +37,7 @@ function AppLayout() {
           <Route path="/artists/:id" element={<ArtistDetails />} />
           <Route path="/recommendations" element={<Recommendations />} />
           <Route path="/book/:artistId" element={
-            <ProtectedRoute allowedRoles={['organizer', 'artist']}>
+            <ProtectedRoute allowedRoles={['organizer', 'artist', 'admin']}>
               <Booking />
             </ProtectedRoute>
           } />

@@ -60,7 +60,10 @@ export default function Booking() {
         )
         setUnavailDates(blocked)
       })
-      .catch(() => navigate('/artists'))
+      .catch((err) => {
+        console.error('Failed to load artist for booking:', err)
+        setError('Artist could not be loaded. Please return to the artist directory and try again.')
+      })
       .finally(() => setLoading(false))
   }, [artistId])
 
@@ -90,7 +93,7 @@ export default function Booking() {
     try {
       await api.post('/bookings', {
         ...form,
-        artist_id: Number(artistId),
+        artist_id: Number(artist?.id || artistId),
         budget: Number(form.budget),
         duration_hours: Number(form.duration_hours),
       })

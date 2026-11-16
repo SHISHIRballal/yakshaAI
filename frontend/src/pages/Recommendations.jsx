@@ -714,7 +714,19 @@ export default function Recommendations() {
                           </div>
 
                           <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                            <button className="btn btn-primary btn-sm" onClick={e => { e.stopPropagation(); navigate(`/book/${artist.id}`) }}>Book</button>
+                            <button
+                              className="btn btn-primary btn-sm"
+                              onClick={e => {
+                                e.stopPropagation();
+                                if (!user) {
+                                  navigate(`/auth?redirect=/book/${artist.id}`);
+                                } else {
+                                  navigate(`/book/${artist.id}`);
+                                }
+                              }}
+                            >
+                              Book
+                            </button>
                             <button
                               className="btn btn-outline btn-sm"
                               onClick={e => {

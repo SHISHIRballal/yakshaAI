@@ -29,7 +29,10 @@ export default function Home() {
 
   useEffect(() => {
     api.get('/artists?limit=6&is_verified=true')
-      .then(res => setFeaturedArtists(res.data.slice(0, 6)))
+      .then(res => {
+        const items = Array.isArray(res.data) ? res.data : (res.data?.items || [])
+        setFeaturedArtists(items.slice(0, 6))
+      })
       .catch(() => {})
       .finally(() => setLoading(false))
   }, [])

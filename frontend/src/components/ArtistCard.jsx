@@ -108,7 +108,11 @@ export default function ArtistCard({ artist }) {
               className="btn btn-primary btn-sm"
               onClick={(e) => {
                 e.stopPropagation()
-                navigate(`/book/${artist.id}`)
+                if (!user) {
+                  navigate(`/auth?redirect=/book/${artist.id}`)
+                } else {
+                  navigate(`/book/${artist.id}`)
+                }
               }}
             >
               Book
