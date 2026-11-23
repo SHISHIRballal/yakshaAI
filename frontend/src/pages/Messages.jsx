@@ -154,12 +154,14 @@ export default function Messages() {
       }
 
       // If active conversation already matches this user/artist, avoid re-fetching!
-      if (activeUserIdRef.current === queryId) {
+      if (!isArtistParam && activeUserIdRef.current === queryId) {
         return;
       }
 
-      // Check existing conversations first
-      const existing = conversations.find((c) => c.other_user_id === queryId);
+      // Check existing conversations first (only if queryId is a user_id)
+      const existing = !isArtistParam
+        ? conversations.find((c) => c.other_user_id === queryId)
+        : null;
 
       if (existing) {
         activeUserIdRef.current = existing.other_user_id;

@@ -33,6 +33,7 @@ def recommend_artists(request: RecommendationRequest, db: Session = Depends(get_
         a = r["artist"]
         recommended.append(RecommendedArtist(
             id=a.id,
+            user_id=a.user_id,
             user_name=a.user.name if a.user else "Unknown",
             city=a.city,
             state=a.state,
@@ -43,7 +44,7 @@ def recommend_artists(request: RecommendationRequest, db: Session = Depends(get_
             avg_rating=a.avg_rating,
             total_reviews=a.total_reviews,
             is_verified=a.is_verified,
-            profile_photo_url=a.profile_photo_url,
+            profile_photo_url=a.profile_photo_url or (a.user.profile_photo_url if a.user else None),
             match_score=r["match_score"],
             match_reasons=r["match_reasons"],
             bio=a.bio,

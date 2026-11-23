@@ -19,6 +19,7 @@ class RecommendationRequest(BaseModel):
 
 class RecommendedArtist(BaseModel):
     id: int
+    user_id: Optional[int] = None
     user_name: str
     city: Optional[str]
     state: str
